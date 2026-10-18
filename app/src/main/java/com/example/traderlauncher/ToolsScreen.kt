@@ -4,9 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -29,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+private fun Section(title: String, icon: Int, content: @Composable () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -38,7 +40,10 @@ private fun Section(title: String, content: @Composable () -> Unit) {
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Ico(icon, tint = Accent, size = 20.dp)
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.padding(start = 8.dp))
+        }
         content()
     }
 }
@@ -77,7 +82,7 @@ fun ToolsScreen(store: Store) {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Section("Kalkulator posisi") {
+        Section("Kalkulator posisi", R.drawable.ic_calculator) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 NumField("Saldo", balance, Modifier.weight(1f)) { balance = it; store.putStr("c_bal", it) }
                 NumField("Risiko %", riskPct, Modifier.weight(1f)) { riskPct = it; store.putStr("c_risk", it) }
@@ -115,7 +120,7 @@ fun ToolsScreen(store: Store) {
             }
         }
 
-        Section("Checklist pra-trade") {
+        Section("Checklist pra-trade", R.drawable.ic_check) {
             CHECKLIST.forEachIndexed { i, item ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = checks[i], onCheckedChange = { checks[i] = it })
@@ -123,18 +128,24 @@ fun ToolsScreen(store: Store) {
                 }
             }
             val done = checks.count { it }
+            val all = done == CHECKLIST.size
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (done == CHECKLIST.size) "Siap eksekusi ✅" else "$done/${CHECKLIST.size} terpenuhi",
-                    color = if (done == CHECKLIST.size) Green else Muted,
-                    modifier = Modifier.weight(1f),
-                    fontSize = 13.sp
-                )
+                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    if (all) {
+                        Ico(R.drawable.ic_check, tint = Green, size = 18.dp)
+                        Spacer(Modifier.width(6.dp))
+                    }
+                    Text(
+                        if (all) "Siap eksekusi" else "$done/${CHECKLIST.size} terpenuhi",
+                        color = if (all) Green else Muted,
+                        fontSize = 13.sp
+                    )
+                }
                 TextButton(onClick = { for (i in checks.indices) checks[i] = false }) { Text("Reset") }
             }
         }
 
-        Section("Tautan cepat") {
+        Section("Tautan cepat", R.drawable.ic_open_in_new) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = { openUrl(ctx, "https://www.forexfactory.com/calendar") },

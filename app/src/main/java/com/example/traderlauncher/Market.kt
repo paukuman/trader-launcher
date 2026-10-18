@@ -1,28 +1,104 @@
 package com.example.traderlauncher
 
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
 
 data class Quote(val price: Double, val changePct: Double?)
 
+enum class Route { BINANCE, YAHOO, NONE }
+
+/**
+ * Market data layer. Watchlist entries are "symbols" in one of these forms:
+ *   BTCUSDT            -> Binance spot (auto)
+ *   EURUSD / XAUUSD    -> forex & metals (Yahoo, fallback open.er-api for non-metals)
+ *   SPX, NDX, DXY ...  -> aliases (see ALIAS)
+ *   EXCHANGE:SYMBOL    -> TradingView-style, e.g. OANDA:XAUUSD, IDX:BBCA, NASDAQ:AAPL
+ * TradingView has NO official price API: we only embed its widget (ChartScreen) for charts.
+ */
 object Market {
     private val FIAT = setOf(
-        "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD",
-        "IDR", "SGD", "MYR", "CNY", "HKD", "XAU", "XAG"
+        "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD", "IDR", "SGD", "MYR", "CNY",
+        "HKD", "THB", "PHP", "INR", "KRW", "TWD", "SEK", "NOK", "DKK", "PLN", "ZAR", "MXN",
+        "TRY", "BRL", "AED", "SAR", "XAU", "XAG", "XPT", "XPD"
     )
+    private val METALS = setOf("XAU", "XAG", "XPT", "XPD")
+    private val G10 = setOf("USD", "EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD", "XAU", "XAG", "XPT", "XPD")
 
-    // Endpoint data-publik Binance (market data saja, tanpa API key)
+    /** alias -> (Yahoo symbol, TradingView symbol) */
+    private val ALIAS: Map<String, Pair<String, String>> = mapOf(
+        "SPX" to ("^GSPC" to "SP:SPX"),
+        "US500" to ("^GSPC" to "SP:SPX"),
+        "NDX" to ("^NDX" to "NASDAQ:NDX"),
+        "NAS100" to ("^NDX" to "NASDAQ:NDX"),
+        "DJI" to ("^DJI" to "DJ:DJI"),
+        "US30" to ("^DJI" to "DJ:DJI"),
+        "DXY" to ("DX-Y.NYB" to "TVC:DXY"),
+        "USOIL" to ("CL=F" to "TVC:USOIL"),
+        "WTI" to ("CL=F" to "TVC:USOIL"),
+        "UKOIL" to ("BZ=F" to "TVC:UKOIL"),
+        "BRENT" to ("BZ=F" to "TVC:UKOIL"),
+        "NATGAS" to ("NG=F" to "TVC:NATGAS"),
+        "GER40" to ("^GDAXI" to "TVC:DAX"),
+        "JP225" to ("^N225" to "TVC:NI225"),
+        "VIX" to ("^VIX" to "TVC:VIX")
+    )
+    private val YAHOO_ALT = mapOf("XAUUSD" to "GC=F", "XAGUSD" to "SI=F")
     private val HOSTS = listOf("https://data-api.binance.vision", "https://api.binance.com")
+    private const val UA = "Mozilla/5.0 (Linux; Android 13) TraderLauncher/0.2"
 
-    fun isForex(s: String) = s.length == 6 && s.take(3) in FIAT && s.drop(3) in FIAT
+    private val yCache = ConcurrentHashMap<String, Pair<Long, Quote>>()
 
+    // ---------- symbol helpers ----------
+    fun baseOf(sym: String): String = sym.substringAfter(':')
+    private fun prefixOf(sym: String): String = sym.substringBefore(':', "")
+    fun isFxBase(base: String) = base.length == 6 && base.take(3) in FIAT && base.drop(3) in FIAT
+    fun isFxLike(sym: String) = isFxBase(baseOf(sym))
+
+    fun yahooSymbol(sym: String): String? {
+        val pre = prefixOf(sym)
+        val base = baseOf(sym)
+        if (pre == "BINANCE") return null
+        ALIAS[base]?.let { return it.first }
+        return when {
+            pre == "NASDAQ" || pre == "NYSE" || pre == "AMEX" || pre == "ARCA" -> base
+            pre == "IDX" -> "$base.JK"
+            isFxBase(base) -> "$base=X"
+            else -> null
+        }
+    }
+
+    fun route(sym: String): Route {
+        if (yahooSymbol(sym) != null) return Route.YAHOO
+        val pre = prefixOf(sym)
+        return if (pre.isEmpty() || pre == "BINANCE") Route.BINANCE else Route.NONE
+    }
+
+    fun tvSymbol(sym: String): String {
+        if (':' in sym) return sym
+        ALIAS[sym]?.let { return it.second }
+        if (isFxBase(sym)) {
+            val both = sym.take(3) in G10 && sym.drop(3) in G10
+            return (if (both) "OANDA:" else "FX_IDC:") + sym
+        }
+        return "BINANCE:$sym"
+    }
+
+    // ---------- http ----------
     private fun get(url: String): String {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 6000
         c.readTimeout = 6000
+        c.setRequestProperty("User-Agent", UA)
         try {
             return c.inputStream.bufferedReader().use { it.readText() }
         } finally {
@@ -42,6 +118,7 @@ object Market {
         throw last ?: IllegalStateException("no host")
     }
 
+    // ---------- providers ----------
     private fun parseTicker(o: JSONObject): Pair<String, Quote> =
         o.getString("symbol") to Quote(
             o.getString("lastPrice").toDouble(),
@@ -60,43 +137,96 @@ object Market {
                 out[s] = q
             }
         } catch (e: Exception) {
-            // Satu simbol salah bikin batch gagal -> coba satu per satu
+            // One invalid symbol fails the whole batch -> retry one by one
             for (s in symbols) {
                 try {
                     val (k, q) = parseTicker(JSONObject(binanceGet("/api/v3/ticker/24hr?symbol=$s")))
                     out[k] = q
                 } catch (e2: Exception) {
-                    // abaikan simbol yang tidak valid
+                    // ignore invalid symbol
                 }
             }
         }
         return out
     }
 
-    private fun fetchFx(pairs: List<String>): Map<String, Quote> {
-        val rates = JSONObject(get("https://open.er-api.com/v6/latest/USD")).getJSONObject("rates")
-        val out = HashMap<String, Quote>()
-        for (p in pairs) {
-            val b = p.take(3)
-            val q = p.drop(3)
-            if (rates.has(b) && rates.has(q)) {
-                out[p] = Quote(rates.getDouble(q) / rates.getDouble(b), null)
-            }
-        }
-        return out
+    private fun fetchYahoo(ys: String): Quote? {
+        val url = "https://query1.finance.yahoo.com/v8/finance/chart/" +
+            URLEncoder.encode(ys, "UTF-8") + "?interval=1d&range=1d"
+        val meta = JSONObject(get(url))
+            .getJSONObject("chart").getJSONArray("result").getJSONObject(0).getJSONObject("meta")
+        val price = meta.getDouble("regularMarketPrice")
+        var prev = meta.optDouble("previousClose", Double.NaN)
+        if (prev.isNaN()) prev = meta.optDouble("chartPreviousClose", Double.NaN)
+        val chg = if (prev.isNaN() || prev == 0.0) null else (price - prev) / prev * 100.0
+        return Quote(price, chg)
     }
 
-    fun fetch(symbols: List<String>): Map<String, Quote> {
-        val out = HashMap<String, Quote>()
-        val crypto = symbols.filter { !isForex(it) }
-        val fx = symbols.filter { isForex(it) }
-        if (crypto.isNotEmpty()) {
-            try { out.putAll(fetchBinance(crypto)) } catch (e: Exception) { }
+    private fun fetchYahooCached(sym: String): Quote? {
+        val now = System.currentTimeMillis()
+        val cached = yCache[sym]
+        if (cached != null && now - cached.first < 15_000) return cached.second
+        val ys = yahooSymbol(sym) ?: return null
+        var q: Quote? = try { fetchYahoo(ys) } catch (e: Exception) { null }
+        if (q == null) {
+            val alt = YAHOO_ALT[baseOf(sym)]
+            if (alt != null) q = try { fetchYahoo(alt) } catch (e: Exception) { null }
         }
-        if (fx.isNotEmpty()) {
-            try { out.putAll(fetchFx(fx)) } catch (e: Exception) { }
+        if (q != null) {
+            yCache[sym] = now to q
+            return q
         }
-        return out
+        return cached?.second // stale value is better than nothing
+    }
+
+    private fun fetchEr(syms: List<String>, out: MutableMap<String, Quote>) {
+        val rates = JSONObject(get("https://open.er-api.com/v6/latest/USD")).getJSONObject("rates")
+        for (s in syms) {
+            val b = baseOf(s)
+            val x = b.take(3)
+            val y = b.drop(3)
+            if (rates.has(x) && rates.has(y)) {
+                out[s] = Quote(rates.getDouble(y) / rates.getDouble(x), null)
+            }
+        }
+    }
+
+    /** Returns quotes keyed by the ORIGINAL watchlist symbol. Missing key = no price available. */
+    suspend fun fetch(symbols: List<String>): Map<String, Quote> = coroutineScope {
+        val out = ConcurrentHashMap<String, Quote>()
+        val jobs = ArrayList<Deferred<Unit>>()
+
+        val bin = symbols.filter { route(it) == Route.BINANCE }
+        if (bin.isNotEmpty()) {
+            jobs.add(async(Dispatchers.IO) {
+                val res = fetchBinance(bin.map { baseOf(it) }.distinct())
+                for (s in bin) {
+                    val q = res[baseOf(s)]
+                    if (q != null) out[s] = q
+                }
+                Unit
+            })
+        }
+        for (s in symbols.filter { route(it) == Route.YAHOO }) {
+            jobs.add(async(Dispatchers.IO) {
+                val q = fetchYahooCached(s)
+                if (q != null) out[s] = q
+                Unit
+            })
+        }
+        jobs.awaitAll()
+
+        // Fallback for plain forex (not metals) when Yahoo failed
+        val missing = symbols.filter {
+            route(it) == Route.YAHOO && !out.containsKey(it) && isFxBase(baseOf(it)) &&
+                baseOf(it).take(3) !in METALS && baseOf(it).drop(3) !in METALS
+        }
+        if (missing.isNotEmpty()) {
+            withContext(Dispatchers.IO) {
+                try { fetchEr(missing, out) } catch (e: Exception) { }
+            }
+        }
+        HashMap(out)
     }
 }
 

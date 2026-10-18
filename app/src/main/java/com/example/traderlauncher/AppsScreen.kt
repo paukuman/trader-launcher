@@ -6,18 +6,22 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,18 +32,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/** Full-screen app drawer, shown as an overlay (swipe up on the dock or tap the grid button). */
 @Composable
 fun AppsScreen(
     apps: List<AppEntry>,
     pinnedPkgs: List<String>,
     onLaunch: (AppEntry) -> Unit,
-    onTogglePin: (String) -> Unit
+    onTogglePin: (String) -> Unit,
+    onClose: () -> Unit
 ) {
     val ctx = LocalContext.current
     var q by remember { mutableStateOf("") }
@@ -49,16 +57,29 @@ fun AppsScreen(
         if (s.isEmpty()) apps else apps.filter { it.label.lowercase().contains(s) }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = q,
-            onValueChange = { q = it },
-            singleLine = true,
-            placeholder = { Text("Cari aplikasi…") },
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-            keyboardActions = KeyboardActions(onGo = { filtered.firstOrNull()?.let { onLaunch(it) } })
-        )
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Color(0xF20B0F1A))
+            .pointerInput(Unit) {} // swallow touches
+            .systemBarsPadding()
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = q,
+                onValueChange = { q = it },
+                singleLine = true,
+                placeholder = { Text("Cari aplikasi…") },
+                leadingIcon = { Ico(R.drawable.ic_search, tint = Muted, size = 20.dp) },
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { filtered.firstOrNull()?.let { onLaunch(it) } })
+            )
+            IconButton(onClick = onClose) { Ico(R.drawable.ic_close) }
+        }
         LazyVerticalGrid(
             columns = GridCells.Fixed(4),
             modifier = Modifier.weight(1f),

@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,10 +15,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,9 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -53,7 +54,7 @@ private val SESSIONS = listOf(
     Sess("New York", "America/New_York", 8, 17)
 )
 
-/** Pair(isOpen, "jamBuka–jamTutup" dalam WIB). DST ikut dihitung lewat zona waktu. */
+/** Pair(isOpen, "open-close" in WIB). DST handled through real time zones. */
 private fun sessionState(s: Sess, now: ZonedDateTime): Pair<Boolean, String> {
     val local = now.withZoneSameInstant(ZoneId.of(s.zone))
     val weekday = local.dayOfWeek.value in 1..5
@@ -117,7 +118,14 @@ fun ClockHeader() {
 
 @Composable
 fun PairRow(sym: String, q: Quote?, onClick: () -> Unit, onLong: () -> Unit) {
-    val fx = Market.isForex(sym)
+    val base = Market.baseOf(sym)
+    val fx = Market.isFxBase(base)
+    val pre = sym.substringBefore(':', "")
+    val src = when (Market.route(sym)) {
+        Route.BINANCE -> "Binance • live"
+        Route.YAHOO -> "Yahoo • ±15 dtk"
+        Route.NONE -> "Chart saja"
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -129,11 +137,15 @@ fun PairRow(sym: String, q: Quote?, onClick: () -> Unit, onLong: () -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                if (fx) sym.take(3) + "/" + sym.drop(3) else sym,
+                if (fx) base.take(3) + "/" + base.drop(3) else base,
                 fontWeight = FontWeight.Bold,
                 fontSize = 16.sp
             )
-            Text(if (fx) "Forex • kurs harian" else "Binance • live", fontSize = 11.sp, color = Muted)
+            Text(
+                (if (pre.isNotEmpty()) "$pre • " else "") + src,
+                fontSize = 11.sp,
+                color = Muted
+            )
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
@@ -152,34 +164,21 @@ fun PairRow(sym: String, q: Quote?, onClick: () -> Unit, onLong: () -> Unit) {
 }
 
 @Composable
-fun Dock(dock: List<AppEntry>, onOpenApp: (AppEntry) -> Unit) {
+fun Dock(dock: List<AppEntry>, onOpenApp: (AppEntry) -> Unit, onOpenDrawer: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(10.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
             .clip(RoundedCornerShape(22.dp))
             .background(CardBg)
-            .padding(10.dp),
+            .padding(8.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (dock.isEmpty()) {
-            Text(
-                "Dock kosong. Tekan lama aplikasi di tab Apps untuk pin.",
-                fontSize = 12.sp,
-                color = Muted,
-                textAlign = TextAlign.Center
-            )
-        } else {
-            dock.forEach { app ->
-                Column(
-                    Modifier.clickable { onOpenApp(app) },
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    AppIcon(app, 50.dp)
-                }
-            }
+        dock.forEach { app ->
+            Box(Modifier.clickable { onOpenApp(app) }.padding(4.dp)) { AppIcon(app, 46.dp) }
         }
+        IconButton(onClick = onOpenDrawer) { Ico(R.drawable.ic_apps, size = 28.dp) }
     }
 }
 
@@ -187,12 +186,10 @@ fun Dock(dock: List<AppEntry>, onOpenApp: (AppEntry) -> Unit) {
 fun HomeScreen(
     watch: List<String>,
     quotes: Map<String, Quote>,
-    dock: List<AppEntry>,
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
-    onOpenApp: (AppEntry) -> Unit
+    onOpenChart: (String) -> Unit
 ) {
-    val ctx = LocalContext.current
     var showAdd by remember { mutableStateOf(false) }
     var toRemove by remember { mutableStateOf<String?>(null) }
 
@@ -202,8 +199,18 @@ fun HomeScreen(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Pantauan", fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-            TextButton(onClick = { showAdd = true }) { Text("+ Pair") }
+            Ico(R.drawable.ic_chart, tint = Accent, size = 20.dp)
+            Text(
+                "Pantauan",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                modifier = Modifier.weight(1f).padding(start = 8.dp)
+            )
+            TextButton(onClick = { showAdd = true }) {
+                Ico(R.drawable.ic_add, size = 18.dp)
+                Spacer(Modifier.width(4.dp))
+                Text("Pair")
+            }
         }
         LazyColumn(
             Modifier.weight(1f).padding(horizontal = 12.dp),
@@ -213,7 +220,7 @@ fun HomeScreen(
                 PairRow(
                     sym = sym,
                     q = quotes[sym],
-                    onClick = { openChart(ctx, sym) },
+                    onClick = { onOpenChart(sym) },
                     onLong = { toRemove = sym }
                 )
             }
@@ -221,7 +228,6 @@ fun HomeScreen(
                 item { Text("Belum ada pair. Tekan + Pair.", color = Muted) }
             }
         }
-        Dock(dock, onOpenApp)
     }
 
     if (showAdd) {
@@ -235,10 +241,10 @@ fun HomeScreen(
                         value = text,
                         onValueChange = { text = it.uppercase() },
                         singleLine = true,
-                        label = { Text("Mis. BTCUSDT, EURUSD") }
+                        label = { Text("Simbol") }
                     )
                     Text(
-                        "Crypto: data Binance (live). Forex: kurs harian indikatif. Emas: pakai PAXGUSDT.",
+                        "Contoh: BTCUSDT, EURUSD, XAUUSD, XAGUSD, SPX, DXY, IDX:BBCA, NASDAQ:AAPL, atau format TradingView seperti OANDA:XAUUSD.",
                         fontSize = 11.sp,
                         color = Muted,
                         modifier = Modifier.padding(top = 8.dp)
@@ -260,7 +266,11 @@ fun HomeScreen(
             title = { Text(s) },
             text = { Text("Hapus dari pantauan?") },
             confirmButton = {
-                TextButton(onClick = { onRemove(s); toRemove = null }) { Text("Hapus") }
+                TextButton(onClick = { onRemove(s); toRemove = null }) {
+                    Ico(R.drawable.ic_delete, tint = Red, size = 18.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Hapus", color = Red)
+                }
             },
             dismissButton = {
                 TextButton(onClick = { toRemove = null }) { Text("Batal") }

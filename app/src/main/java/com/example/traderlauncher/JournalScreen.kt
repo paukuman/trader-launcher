@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -171,7 +173,11 @@ fun TradeDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (onDelete != null) {
-                    TextButton(onClick = onDelete) { Text("Hapus trade ini", color = Red) }
+                    TextButton(onClick = onDelete) {
+                        Ico(R.drawable.ic_delete, tint = Red, size = 18.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Hapus trade ini", color = Red)
+                    }
                 }
             }
         },
@@ -283,9 +289,18 @@ fun JournalScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Ico(R.drawable.ic_journal, tint = Accent)
             Text("Jurnal", fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = { exportCsv(ctx, trades) }, enabled = trades.isNotEmpty()) { Text("Ekspor") }
-            Button(onClick = { creating = true }) { Text("+ Trade") }
+            OutlinedButton(onClick = { exportCsv(ctx, trades) }, enabled = trades.isNotEmpty()) {
+                Ico(R.drawable.ic_share, size = 18.dp)
+                Spacer(Modifier.width(6.dp))
+                Text("Ekspor")
+            }
+            Button(onClick = { creating = true }) {
+                Ico(R.drawable.ic_add, size = 18.dp)
+                Spacer(Modifier.width(4.dp))
+                Text("Trade")
+            }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             StatBox("Trade", trades.size.toString(), modifier = Modifier.weight(1f))

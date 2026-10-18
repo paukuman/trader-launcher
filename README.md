@@ -1,25 +1,18 @@
 # Trader Launcher
 
-Home screen khusus trader:
-- Jam WIB + status sesi Sydney / Tokyo / London / New York (jam buka-tutup dalam WIB, DST otomatis)
-- Pantauan pair: crypto live dari Binance (refresh 5 dtk), forex kurs harian indikatif
-- Tap pair -> buka chart di TradingView, tekan lama -> hapus
-- Jurnal trading: entry/SL/TP, RR, hasil win/loss, setup, catatan; statistik win rate, net PnL, profit factor; ekspor CSV
-- Alat: kalkulator ukuran posisi, checklist pra-trade, tautan cepat
-- Dock aplikasi trading (auto-deteksi TradingView, MT4/5, Binance, Bybit, OKX) + pin manual
-- App drawer dengan pencarian
+Android home-screen app for traders. Swipe between pages, tap a pair for a TradingView chart.
 
-## Build dari Termux
+- **Pantau**: clock (WIB) + market sessions, watchlist (crypto live from Binance; forex, metals such as XAUUSD/XAGUSD, indices, stocks from Yahoo), in-app TradingView chart
+- **Jurnal**: trade journal with stats and CSV export
+- **Alat**: position size calculator, pre-trade checklist, quick links
+- Persistent dock for trading apps; swipe up on the dock (or tap the grid button) for the app drawer
+
+See `CHANGELOG.md` for history and `AGENTS.md` for how AI assistants should edit and ship this project.
+
+## Build from Termux
 
     pkg update && pkg install git gh unzip
     termux-setup-storage
-    unzip ~/storage/downloads/TraderLauncher.zip -d ~
-    cd ~/TraderLauncher
     gh auth login
-    git init -b main
-    git add . && git commit -m "init"
-    gh repo create trader-launcher --private --source=. --push
-
-    gh run watch
-    gh run download -n TraderLauncher-debug
-    cp TraderLauncher-debug/TraderLauncher.apk ~/storage/downloads/
+    cd ~/TraderLauncher
+    bash tools/ship.sh "feat: my change"        # add a tag like v0.2.0 as 2nd arg to publish a Release

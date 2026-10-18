@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -16,7 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -45,6 +48,17 @@ fun TraderTheme(content: @Composable () -> Unit) {
             surface = Color(0xFF161C2B)
         ),
         content = content
+    )
+}
+
+/** Vector icon from res/drawable (ic_*.xml). Never use emoji for icons. */
+@Composable
+fun Ico(id: Int, modifier: Modifier = Modifier, tint: Color = Color.White, size: Dp = 24.dp) {
+    Icon(
+        painter = painterResource(id),
+        contentDescription = null,
+        modifier = modifier.size(size),
+        tint = tint
     )
 }
 
@@ -87,11 +101,6 @@ fun openUrl(ctx: Context, url: String) {
     } catch (e: Exception) {
         Toast.makeText(ctx, "Tidak bisa membuka tautan", Toast.LENGTH_SHORT).show()
     }
-}
-
-fun openChart(ctx: Context, sym: String) {
-    val tv = (if (Market.isForex(sym)) "FX:" else "BINANCE:") + sym
-    openUrl(ctx, "https://www.tradingview.com/chart/?symbol=$tv")
 }
 
 @Composable

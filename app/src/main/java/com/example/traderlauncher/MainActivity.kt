@@ -1,23 +1,31 @@
 package com.example.traderlauncher
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,8 +37,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -64,7 +75,26 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        AppState.homeSignal++
+        AppState.homeSignal++ // Home button pressed while launcher is open
+    }
+}
+
+@Composable
+fun PageDots(state: PagerState) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 6.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        repeat(state.pageCount) { i ->
+            val sel = state.currentPage == i
+            Box(
+                Modifier
+                    .padding(horizontal = 3.dp)
+                    .size(if (sel) 8.dp else 6.dp)
+                    .clip(CircleShape)
+                    .background(if (sel) Color.White else Color(0x66FFFFFF))
+            )
+        }
     }
 }
 
@@ -72,8 +102,11 @@ class MainActivity : ComponentActivity() {
 fun Root(store: Store) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(pageCount = { 3 }) // 0 Pantau, 1 Jurnal, 2 Alat
 
-    var tab by remember { mutableIntStateOf(0) }
+    var drawerOpen by remember { mutableStateOf(false) }
+    var chartSym by remember { mutableStateOf<String?>(null) }
+
     val watch = remember { mutableStateListOf<String>().apply { addAll(store.watchlist) } }
     val quotes = remember { mutableStateMapOf<String, Quote>() }
     val trades = remember { mutableStateListOf<Trade>().apply { addAll(store.loadTrades()) } }
@@ -83,22 +116,34 @@ fun Root(store: Store) {
     val resumed = AppState.resumed
     val signal = AppState.homeSignal
 
-    LaunchedEffect(signal) { tab = 0 }
-    BackHandler { tab = 0 }
+    LaunchedEffect(signal) {
+        drawerOpen = false
+        chartSym = null
+        pagerState.animateScrollToPage(0)
+    }
+
+    fun handleBack() {
+        if (chartSym != null) {
+            chartSym = null
+        } else if (drawerOpen) {
+            drawerOpen = false
+        } else {
+            scope.launch { pagerState.animateScrollToPage(0) }
+        }
+    }
+    BackHandler { handleBack() } // always consumed: a launcher must never close
 
     LaunchedEffect(resumed) {
         if (resumed) apps = withContext(Dispatchers.IO) { loadApps(ctx) }
     }
 
-    // Auto-refresh harga tiap 5 detik selama launcher terlihat
+    // Auto refresh quotes every 5 s while the launcher is visible
     val watchKey = watch.joinToString(",")
     LaunchedEffect(resumed, watchKey) {
         if (resumed) {
             while (true) {
                 val syms = watch.toList()
-                if (syms.isNotEmpty()) {
-                    quotes.putAll(withContext(Dispatchers.IO) { Market.fetch(syms) })
-                }
+                if (syms.isNotEmpty()) quotes.putAll(Market.fetch(syms))
                 delay(5000)
             }
         }
@@ -122,16 +167,20 @@ fun Root(store: Store) {
     }
 
     fun addPair(raw: String) {
-        val s = raw.uppercase().replace("/", "").replace("-", "").replace(" ", "")
+        val s = raw.uppercase().trim().replace("/", "").replace("-", "").replace(" ", "")
         if (s.isEmpty() || s in watch) return
         scope.launch {
-            val r = withContext(Dispatchers.IO) { Market.fetch(listOf(s)) }
-            if (r.containsKey(s)) {
+            val r = Market.fetch(listOf(s))
+            val hasPrice = r.containsKey(s)
+            if (hasPrice || ':' in s) {
                 watch.add(s)
                 store.watchlist = watch.toList()
                 quotes.putAll(r)
+                if (!hasPrice) {
+                    Toast.makeText(ctx, "Harga tidak tersedia, ditambahkan sebagai chart saja", Toast.LENGTH_LONG).show()
+                }
             } else {
-                Toast.makeText(ctx, "Pair $s tidak ditemukan", Toast.LENGTH_SHORT).show()
+                Toast.makeText(ctx, "Simbol $s tidak ditemukan", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -147,51 +196,58 @@ fun Root(store: Store) {
         store.saveTrades(trades.toList())
     }
 
+    // Swipe up on the dock area opens the app drawer
+    val swipeUp = Modifier.pointerInput(Unit) {
+        var total = 0f
+        detectVerticalDragGestures(
+            onDragStart = { total = 0f },
+            onDragEnd = { if (total < -60f) drawerOpen = true },
+            onVerticalDrag = { _, d -> total += d }
+        )
+    }
+
     Box(Modifier.fillMaxSize().background(Color(0xCC0B0F1A))) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            contentColor = Color.White,
-            bottomBar = {
-                NavigationBar(containerColor = Color(0xF20B0F1A), contentColor = Color.White) {
-                    val items = listOf("📈" to "Pantau", "📓" to "Jurnal", "🧮" to "Alat", "🔲" to "Apps")
-                    items.forEachIndexed { i, item ->
-                        NavigationBarItem(
-                            selected = tab == i,
-                            onClick = { tab = i },
-                            icon = { Text(item.first) },
-                            label = { Text(item.second) }
-                        )
-                    }
-                }
-            }
-        ) { pad ->
-            Box(Modifier.padding(pad).fillMaxSize()) {
-                when (tab) {
+        Column(Modifier.fillMaxSize().systemBarsPadding()) {
+            HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
+                when (page) {
                     0 -> HomeScreen(
                         watch = watch,
                         quotes = quotes,
-                        dock = dock,
                         onAdd = { addPair(it) },
                         onRemove = { s ->
                             watch.remove(s)
                             store.watchlist = watch.toList()
                         },
-                        onOpenApp = { launchApp(ctx, it) }
+                        onOpenChart = { chartSym = it }
                     )
                     1 -> JournalScreen(
                         trades = trades,
                         onSave = { saveTrade(it) },
                         onDelete = { deleteTrade(it) }
                     )
-                    2 -> ToolsScreen(store)
-                    else -> AppsScreen(
-                        apps = apps,
-                        pinnedPkgs = dock.map { it.pkg },
-                        onLaunch = { launchApp(ctx, it) },
-                        onTogglePin = { togglePin(it) }
-                    )
+                    else -> ToolsScreen(store)
                 }
             }
+            Column(swipeUp) {
+                PageDots(pagerState)
+                Dock(dock, onOpenApp = { launchApp(ctx, it) }, onOpenDrawer = { drawerOpen = true })
+            }
         }
+
+        AnimatedVisibility(
+            visible = drawerOpen,
+            enter = slideInVertically(initialOffsetY = { it }),
+            exit = slideOutVertically(targetOffsetY = { it })
+        ) {
+            AppsScreen(
+                apps = apps,
+                pinnedPkgs = dock.map { it.pkg },
+                onLaunch = { launchApp(ctx, it); drawerOpen = false },
+                onTogglePin = { togglePin(it) },
+                onClose = { drawerOpen = false }
+            )
+        }
+
+        chartSym?.let { s -> ChartScreen(sym = s, onClose = { chartSym = null }) }
     }
 }
