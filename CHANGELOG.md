@@ -8,6 +8,26 @@ The CI uses the section matching the pushed tag (`vX.Y.Z`) as GitHub Release not
 
 ## [Unreleased]
 
+### Added
+
+- Top pill switcher (Markets / Journal / Apps) synced with the pager; calculator icon opens the Tools overlay.
+- Markets: category filter chips (All, Forex, Commodities, Crypto, Stocks, Indices) via `Cat` / `Market.category`; selected category is persisted (`cat`).
+- Markets: add dialog with one-tap suggestions per category; change-% pill and category badge on each row.
+- Journal: equity curve, All/Open/Wins/Losses filter, colored side stripe per trade.
+- Apps page: pinned row and compact search field; the app grid is now the third pager page.
+- Tools: quick risk presets (0.5 / 1 / 2 %).
+
+### Changed
+
+- Whole UI redesigned: green accent, compact density, translucent green-black gradient, rounded cards.
+- All in-app text is now English; `AGENTS.md` updated accordingly.
+- Tools moved from page 3 to a full-screen overlay; Apps is now page 3.
+- Default watchlist now covers forex, gold, crypto, an index and a stock.
+
+### Removed
+
+- Bottom dock, page dots and the swipe-up app drawer overlay.
+
 ### Fixed
 
 - Build: opt in to ExperimentalFoundationApi in MainActivity.kt (compileDebugKotlin failed in CI).

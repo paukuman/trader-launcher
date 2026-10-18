@@ -9,7 +9,7 @@ architecture, conventions, symbol syntax, or the delivery workflow.
 - The owner works **only from a phone**: Termux + `git` + `gh` (GitHub CLI). CI is GitHub Actions.
   There is no desktop, no Android Studio, no local Gradle.
 - Owner's language: **Indonesian (informal)**. Chat replies: Indonesian.
-  Code, comments, commit messages, CHANGELOG, this file: **English**. UI strings in the app: Indonesian.
+  Code, comments, commit messages, CHANGELOG, this file: **English**. UI strings in the app: **English** (international).
 
 ## 2. Hard constraints (do not break)
 
@@ -32,11 +32,11 @@ architecture, conventions, symbol syntax, or the delivery workflow.
 
 | File | Responsibility |
 |---|---|
-| `MainActivity.kt` | Activity (HOME launcher), `AppState`, `Root()` composable: pager (3 pages), dock, drawer overlay, chart overlay, all top-level state and callbacks, back handling, 5 s quote refresh loop |
-| `HomeScreen.kt` | Page 0: clock + market sessions (`ClockHeader`), watchlist (`PairRow`), add/remove dialogs, `Dock` |
-| `JournalScreen.kt` | Page 1: trade list, stats, `TradeDialog`, CSV export, shared form widgets (`NumField`, `Seg`, `StatBox`) |
-| `ToolsScreen.kt` | Page 2: position size calculator, pre-trade checklist, quick links |
-| `AppsScreen.kt` | Full-screen app drawer overlay (search, grid, long-press menu: pin/info/uninstall) |
+| `MainActivity.kt` | Activity (HOME launcher), `AppState`, `Root()` composable: `TopBar` (tab switcher), pager (3 pages), tools overlay, chart overlay, all top-level state and callbacks, back handling, 5 s quote refresh loop |
+| `HomeScreen.kt` | Page 0 (Markets): compact clock + market sessions (`ClockHeader`), category chips (All/Forex/Commodities/Crypto/Stocks/Indices), watchlist (`PairRow`), add dialog with one-tap suggestions, remove dialog |
+| `JournalScreen.kt` | Page 1: trade list with All/Open/Wins/Losses filter, stats, equity curve (Canvas), `TradeDialog`, CSV export, shared form widgets (`NumField`, `Seg`, `StatBox`) |
+| `ToolsScreen.kt` | Full-screen overlay opened from the top bar: position size calculator, pre-trade checklist, price source switch, quick links |
+| `AppsScreen.kt` | Page 2 (Apps): search, pinned row (max 5), app grid, long-press menu: pin/info/uninstall |
 | `ChartScreen.kt` | Full-screen overlay with the TradingView widget inside a WebView |
 | `Market.kt` | Symbol parsing/routing + providers (Binance, Yahoo, open.er-api), priority logic in `fetch`, `fmtPrice` |
 | `TvFeed.kt` | Unofficial TradingView websocket quote feed (OkHttp): connect, subscribe, parse `qsd`, heartbeat, status |
@@ -45,8 +45,8 @@ architecture, conventions, symbol syntax, or the delivery workflow.
 
 Other: `.github/workflows/build.yml` (CI), `tools/ship.sh` (deliver), `CHANGELOG.md`, `AGENTS.md`.
 
-Navigation model: **no bottom bar**. `HorizontalPager` pages = Pantau / Jurnal / Alat, dots indicator, persistent dock.
-Swipe up on the dock area or tap the grid button -> app drawer overlay. Tap a pair -> chart overlay.
+Navigation model: **no bottom bar and no dock**. `HorizontalPager` pages = Markets / Journal / Apps, switched by swiping or by the slim
+`TopBar` pill. The calculator icon in the `TopBar` opens the Tools overlay. Tap a pair -> chart overlay.
 Home button while open -> `onNewIntent` -> `AppState.homeSignal++` -> closes overlays and returns to page 0.
 
 ## 4. Persistence (`Store`, SharedPreferences file `trader`)
@@ -54,9 +54,10 @@ Home button while open -> `onNewIntent` -> `AppState.homeSignal++` -> closes ove
 | Key | Content |
 |---|---|
 | `watch` | comma-separated watchlist symbols |
-| `pinned` | comma-separated package names for the dock (absent = auto-detect `TRADING_PKGS`) |
+| `pinned` | comma-separated package names for the pinned row on the Apps page (absent = auto-detect `TRADING_PKGS`) |
 | `journal` | JSON array of `Trade` |
 | `c_bal`, `c_risk` | calculator balance / risk % |
+| `cat` | selected watchlist category (`Cat` enum name, empty = All) |
 
 Adding a persisted field: extend `Trade` + `toJson` + `tradeFromJson` with a backward-compatible default.
 
@@ -74,7 +75,7 @@ Watchlist entries are strings:
 | Forex / metals | `EURUSD`, `XAUUSD`, `XAGUSD` | Yahoo (`XAUUSD=X`, alt `GC=F`/`SI=F`), fallback open.er-api (non-metals) | `OANDA:` for G10+metals, else `FX_IDC:` |
 | Alias | `SPX`, `NDX`, `DJI`, `DXY`, `USOIL`, `UKOIL`, `NATGAS`, `GER40`, `JP225`, `VIX` | Yahoo | per `ALIAS` table |
 | TradingView-style | `OANDA:XAUUSD`, `IDX:BBCA`, `NASDAQ:AAPL` | Yahoo when mappable (`IDX` -> `.JK`, `NASDAQ/NYSE/AMEX/ARCA` -> plain) | as typed |
-| Unknown prefix | `COINBASE:BTCUSD` | none (row shows "Chart saja") | as typed |
+| Unknown prefix | `COINBASE:BTCUSD` | none (row shows "Chart only") | as typed |
 
 To add an instrument alias: edit `ALIAS` (Yahoo symbol, TradingView symbol). To add a provider: add a `Route`,
 extend `route()`, add a fetch function, and wire it inside `Market.fetch` (parallel `async`, fill `out[originalSymbol]`).
@@ -92,7 +93,9 @@ External response shapes you rely on (verify if something breaks):
 
 ## 6. UI conventions
 
-- Dark theme over a translucent overlay so the wallpaper shows through. Colors/constants live in `Common.kt` (`CardBg`, `Green`, `Red`, `Muted`, `Accent`).
+- Dark green theme over a translucent gradient so the wallpaper shows through. Colors/constants live in `Common.kt` (`CardBg`, `Surface2`, `Green`, `Red`, `Muted`, `Accent`, `OnAccent`). Use `Modifier.card()` for rows/sections and `Chip` for filters.
+- Compact density: row padding 9-12 dp, body text 13-15 sp, secondary text 10-11 sp. Every `AlertDialog` sets `containerColor = Surface2`.
+- `Cat` (in `Market.kt`) classifies a symbol into Forex / Commodities / Crypto / Stocks / Indices via `Market.category`; extend it when adding aliases.
 - Positive = `Green`, negative = `Red`. Money/price formatting via `fmtPrice`, `fmtN`, `"%+,.2f"`.
 - Full-screen overlays must start with `.pointerInput(Unit) {}` to swallow touches, and use `systemBarsPadding()`.
 - The launcher must never close on Back (`BackHandler` is always consumed in `Root`).
@@ -142,5 +145,5 @@ If CI fails, ask the owner to run `gh run view <id> --log-failed` and paste the 
 ## 10. Known limitations / ideas
 
 - Forex fallback is daily-only; Yahoo is unofficial. Real-time broker data would need the owner's own API key (store in app settings, never in git).
-- Idea backlog: price alerts (foreground service + notification), widgets, equity curve and per-setup stats in the journal,
+- Idea backlog: price alerts (foreground service + notification), widgets, per-setup stats in the journal,
   journal backup (file/Drive), drag-to-reorder watchlist, per-pair notes.
