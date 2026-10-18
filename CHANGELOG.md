@@ -8,6 +8,21 @@ The CI uses the section matching the pushed tag (`vX.Y.Z`) as GitHub Release not
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-18
+
+### Added
+- `TvFeed.kt`: unofficial TradingView quote feed over websocket (OkHttp), same protocol as the npm package `@mathieuc/tradingview`
+  (`~m~len~m~` framing, heartbeat echo, `quote_create_session` / `quote_add_symbols`, `qsd` updates). Origin header rotates on connect failure,
+  reconnect back-off after repeated failures, socket closed while the launcher is paused.
+- Tools page: "Sumber harga" switch (TradingView on/off, default on) and a live connection status line for debugging.
+- Each quote now carries its source (`Quote.src`); watchlist rows show "TradingView / Binance / Yahoo / Kurs harian".
+- Dependency: `com.squareup.okhttp3:okhttp:4.12.0`.
+
+### Changed
+- Price priority: plain crypto -> Binance; everything else -> TradingView feed (if enabled) -> Yahoo -> open.er-api.
+- Rows with an unknown exchange prefix (e.g. `COINBASE:BTCUSD`) can now get a price from the TradingView feed.
+- Version bumped to 0.3.0 (versionCode 3).
+
 ## [0.2.0] - 2026-10-18
 
 ### Added

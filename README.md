@@ -2,7 +2,7 @@
 
 Android home-screen app for traders. Swipe between pages, tap a pair for a TradingView chart.
 
-- **Pantau**: clock (WIB) + market sessions, watchlist (crypto live from Binance; forex, metals such as XAUUSD/XAGUSD, indices, stocks from Yahoo), in-app TradingView chart
+- **Pantau**: clock (WIB) + market sessions, watchlist (crypto live from Binance; forex, metals such as XAUUSD/XAGUSD, indices, stocks via an unofficial TradingView feed with Yahoo fallback), in-app TradingView chart
 - **Jurnal**: trade journal with stats and CSV export
 - **Alat**: position size calculator, pre-trade checklist, quick links
 - Persistent dock for trading apps; swipe up on the dock (or tap the grid button) for the app drawer

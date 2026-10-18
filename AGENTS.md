@@ -19,8 +19,10 @@ architecture, conventions, symbol syntax, or the delivery workflow.
 3. `minSdk 26` (java.time is used). `targetSdk 34`.
 4. **No emoji in the UI.** Icons are VectorDrawable XML in `app/src/main/res/drawable/ic_*.xml`
    (24x24 viewport, Material path data, white fill) rendered with `Ico(R.drawable.ic_x)`.
-5. **Do not scrape TradingView or call its undocumented endpoints** (against its ToS, fragile).
-   TradingView is used only via (a) the official embeddable widget in `ChartScreen` and (b) public deep links.
+5. TradingView has no official price API. Prices come from its **unofficial websocket** (same protocol as the npm package
+   `@mathieuc/tradingview`), implemented in `TvFeed.kt`. The owner explicitly accepted this for personal use.
+   Keep it isolated in `TvFeed.kt`, keep the on/off switch (`src_tv`) and the Yahoo/Binance fallbacks, and never put
+   login credentials, session ids or tokens in the repo. Charts use the official embeddable widget in `ChartScreen`.
 6. Never use `localStorage`-style tricks, never hardcode API keys. Only public, key-less endpoints are allowed.
 7. AI sandboxes usually have **no network and no Android SDK -> you cannot compile**. Be conservative:
    explicit imports, no experimental APIs without `@OptIn`, no new dependencies unless required, small diffs.
@@ -36,7 +38,8 @@ architecture, conventions, symbol syntax, or the delivery workflow.
 | `ToolsScreen.kt` | Page 2: position size calculator, pre-trade checklist, quick links |
 | `AppsScreen.kt` | Full-screen app drawer overlay (search, grid, long-press menu: pin/info/uninstall) |
 | `ChartScreen.kt` | Full-screen overlay with the TradingView widget inside a WebView |
-| `Market.kt` | Symbol parsing/routing + providers (Binance, Yahoo, open.er-api) + `fmtPrice` |
+| `Market.kt` | Symbol parsing/routing + providers (Binance, Yahoo, open.er-api), priority logic in `fetch`, `fmtPrice` |
+| `TvFeed.kt` | Unofficial TradingView websocket quote feed (OkHttp): connect, subscribe, parse `qsd`, heartbeat, status |
 | `Data.kt` | `Trade` model, JSON (de)serialization, `Store` (SharedPreferences) |
 | `Common.kt` | Colors, theme, `Ico`, `AppIcon`, app listing/launching helpers, `fmtN`, `toNum` |
 
@@ -57,7 +60,11 @@ Home button while open -> `onNewIntent` -> `AppState.homeSignal++` -> closes ove
 
 Adding a persisted field: extend `Trade` + `toJson` + `tradeFromJson` with a backward-compatible default.
 
-## 5. Symbols and market data (`Market.kt`)
+## 5. Symbols and market data (`Market.kt`, `TvFeed.kt`)
+
+Price priority per symbol: plain Binance crypto -> Binance. Everything else -> TradingView feed (when `Market.useTv`) -> Yahoo -> open.er-api.
+Each `Quote` has `src` ("TradingView", "Binance", "Yahoo", "open.er-api") shown in the row subtitle. If TradingView prices never show up,
+read the "Status:" line in the Tools page (it shows the last websocket error) and fix `TvFeed.kt` (origin, URL, message format).
 
 Watchlist entries are strings:
 
@@ -78,6 +85,9 @@ External response shapes you rely on (verify if something breaks):
 - Yahoo `GET https://query1.finance.yahoo.com/v8/finance/chart/<sym>?interval=1d&range=1d` (needs a browser-like User-Agent) ->
   `chart.result[0].meta.{regularMarketPrice, previousClose|chartPreviousClose}`. Unofficial; can change or rate-limit.
 - open.er-api `GET https://open.er-api.com/v6/latest/USD` -> `{ "rates": { "EUR": 0.92, ... } }` (daily, no change %).
+- TradingView websocket `wss://data.tradingview.com/socket.io/websocket` (Origin header must be a tradingview.com origin; see `TvFeed` KDoc for
+  framing and messages). Subscribe with `quote_add_symbols`; updates arrive as `qsd` with `v.lp` (last price) and `v.chp` (change %);
+  rejected symbols come back with `s: "error"`. Anonymous (`unauthorized_user_token`) data may be delayed for some exchanges.
 - `Market.fetch` returns `Map<originalSymbol, Quote(price, changePct?)>`; a missing key means "no price".
 
 ## 6. UI conventions

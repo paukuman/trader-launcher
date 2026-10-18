@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
         val store = Store(applicationContext)
+        Market.useTv = store.getStr("src_tv", "1") == "1"
         setContent { TraderTheme { Root(store) } }
     }
 
@@ -134,7 +135,7 @@ fun Root(store: Store) {
     BackHandler { handleBack() } // always consumed: a launcher must never close
 
     LaunchedEffect(resumed) {
-        if (resumed) apps = withContext(Dispatchers.IO) { loadApps(ctx) }
+        if (resumed) apps = withContext(Dispatchers.IO) { loadApps(ctx) } else TvFeed.close()
     }
 
     // Auto refresh quotes every 5 s while the launcher is visible

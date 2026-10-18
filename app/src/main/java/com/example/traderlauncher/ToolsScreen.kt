@@ -14,9 +14,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 @Composable
 private fun Section(title: String, icon: Int, content: @Composable () -> Unit) {
@@ -73,6 +76,14 @@ fun ToolsScreen(store: Store) {
     var entry by remember { mutableStateOf("") }
     var sl by remember { mutableStateOf("") }
     var tp by remember { mutableStateOf("") }
+    var useTv by remember { mutableStateOf(Market.useTv) }
+    var tvStatus by remember { mutableStateOf(TvFeed.status()) }
+    LaunchedEffect(AppState.resumed) {
+        while (AppState.resumed) {
+            tvStatus = TvFeed.status()
+            delay(2000)
+        }
+    }
     val checks = remember { mutableStateListOf<Boolean>().apply { repeat(CHECKLIST.size) { add(false) } } }
 
     Column(
@@ -143,6 +154,29 @@ fun ToolsScreen(store: Store) {
                 }
                 TextButton(onClick = { for (i in checks.indices) checks[i] = false }) { Text("Reset") }
             }
+        }
+
+        Section("Sumber harga", R.drawable.ic_chart) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("TradingView (tidak resmi)", fontSize = 13.sp)
+                    Text(
+                        "Forex, logam, indeks, saham lewat websocket TradingView. Crypto tetap Binance. Cadangan: Yahoo.",
+                        fontSize = 11.sp,
+                        color = Muted
+                    )
+                }
+                Switch(
+                    checked = useTv,
+                    onCheckedChange = {
+                        useTv = it
+                        Market.useTv = it
+                        store.putStr("src_tv", if (it) "1" else "0")
+                        if (!it) TvFeed.close()
+                    }
+                )
+            }
+            Text("Status: " + (if (useTv) tvStatus else "dimatikan"), fontSize = 11.sp, color = Muted)
         }
 
         Section("Tautan cepat", R.drawable.ic_open_in_new) {

@@ -13,7 +13,7 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 
-data class Quote(val price: Double, val changePct: Double?)
+data class Quote(val price: Double, val changePct: Double?, val src: String = "")
 
 enum class Route { BINANCE, YAHOO, NONE }
 
@@ -122,7 +122,8 @@ object Market {
     private fun parseTicker(o: JSONObject): Pair<String, Quote> =
         o.getString("symbol") to Quote(
             o.getString("lastPrice").toDouble(),
-            o.getString("priceChangePercent").toDouble()
+            o.getString("priceChangePercent").toDouble(),
+            "Binance"
         )
 
     private fun fetchBinance(symbols: List<String>): Map<String, Quote> {
@@ -159,7 +160,7 @@ object Market {
         var prev = meta.optDouble("previousClose", Double.NaN)
         if (prev.isNaN()) prev = meta.optDouble("chartPreviousClose", Double.NaN)
         val chg = if (prev.isNaN() || prev == 0.0) null else (price - prev) / prev * 100.0
-        return Quote(price, chg)
+        return Quote(price, chg, "Yahoo")
     }
 
     private fun fetchYahooCached(sym: String): Quote? {
@@ -186,17 +187,40 @@ object Market {
             val x = b.take(3)
             val y = b.drop(3)
             if (rates.has(x) && rates.has(y)) {
-                out[s] = Quote(rates.getDouble(y) / rates.getDouble(x), null)
+                out[s] = Quote(rates.getDouble(y) / rates.getDouble(x), null, "open.er-api")
             }
         }
     }
 
-    /** Returns quotes keyed by the ORIGINAL watchlist symbol. Missing key = no price available. */
+    /** When true, everything except plain Binance crypto is priced from the TradingView feed first (see TvFeed). */
+    @Volatile
+    var useTv: Boolean = true
+
+    /**
+     * Returns quotes keyed by the ORIGINAL watchlist symbol. Missing key = no price available.
+     * Priority: Binance (plain crypto) | TradingView feed (everything else, if useTv) -> Yahoo -> open.er-api.
+     */
     suspend fun fetch(symbols: List<String>): Map<String, Quote> = coroutineScope {
         val out = ConcurrentHashMap<String, Quote>()
+
+        // 1) TradingView feed for everything that is not plain Binance crypto
+        if (useTv) {
+            val tvMap = symbols.filter { route(it) != Route.BINANCE }.associateWith { tvSymbol(it) }
+            if (tvMap.isNotEmpty()) {
+                TvFeed.ensure(tvMap.values)
+                if (TvFeed.healthy()) TvFeed.await(tvMap.values.toList(), 1500)
+                for ((s, tv) in tvMap) {
+                    val q = TvFeed.quote(tv)
+                    if (q != null) out[s] = q
+                }
+            }
+        }
+
+        // 2) Regular providers for whatever is still missing
+        val rest = symbols.filter { !out.containsKey(it) }
         val jobs = ArrayList<Deferred<Unit>>()
 
-        val bin = symbols.filter { route(it) == Route.BINANCE }
+        val bin = rest.filter { route(it) == Route.BINANCE }
         if (bin.isNotEmpty()) {
             jobs.add(async(Dispatchers.IO) {
                 val res = fetchBinance(bin.map { baseOf(it) }.distinct())
@@ -207,7 +231,7 @@ object Market {
                 Unit
             })
         }
-        for (s in symbols.filter { route(it) == Route.YAHOO }) {
+        for (s in rest.filter { route(it) == Route.YAHOO }) {
             jobs.add(async(Dispatchers.IO) {
                 val q = fetchYahooCached(s)
                 if (q != null) out[s] = q
@@ -216,8 +240,8 @@ object Market {
         }
         jobs.awaitAll()
 
-        // Fallback for plain forex (not metals) when Yahoo failed
-        val missing = symbols.filter {
+        // 3) Fallback for plain forex (not metals) when Yahoo failed
+        val missing = rest.filter {
             route(it) == Route.YAHOO && !out.containsKey(it) && isFxBase(baseOf(it)) &&
                 baseOf(it).take(3) !in METALS && baseOf(it).drop(3) !in METALS
         }

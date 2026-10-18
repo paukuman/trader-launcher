@@ -121,10 +121,12 @@ fun PairRow(sym: String, q: Quote?, onClick: () -> Unit, onLong: () -> Unit) {
     val base = Market.baseOf(sym)
     val fx = Market.isFxBase(base)
     val pre = sym.substringBefore(':', "")
-    val src = when (Market.route(sym)) {
-        Route.BINANCE -> "Binance • live"
-        Route.YAHOO -> "Yahoo • ±15 dtk"
-        Route.NONE -> "Chart saja"
+    val src = when (q?.src) {
+        "TradingView" -> "TradingView • live"
+        "Binance" -> "Binance • live"
+        "Yahoo" -> "Yahoo • ±15 dtk"
+        "open.er-api" -> "Kurs harian"
+        else -> if (Market.route(sym) == Route.NONE) "Chart saja" else "Mencari harga…"
     }
     Row(
         Modifier
