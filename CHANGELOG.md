@@ -8,6 +8,10 @@ The CI uses the section matching the pushed tag (`vX.Y.Z`) as GitHub Release not
 
 ## [Unreleased]
 
+### Fixed
+
+- Build: opt in to ExperimentalFoundationApi in MainActivity.kt (compileDebugKotlin failed in CI).
+
 ## [0.3.0] - 2026-10-18
 
 ### Added
