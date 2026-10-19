@@ -231,6 +231,20 @@ object Market {
      */
     suspend fun fetch(symbols: List<String>): Map<String, Quote> = coroutineScope {
         val out = ConcurrentHashMap<String, Quote>()
+        val jobs = ArrayList<Deferred<Unit>>()
+
+        // Plain Binance crypto never uses TradingView: start it first so the TV wait below does not delay it.
+        val bin = symbols.filter { route(it) == Route.BINANCE }
+        if (bin.isNotEmpty()) {
+            jobs.add(async(Dispatchers.IO) {
+                val res = fetchBinance(bin.map { baseOf(it) }.distinct())
+                for (s in bin) {
+                    val q = res[baseOf(s)]
+                    if (q != null) out[s] = q
+                }
+                Unit
+            })
+        }
 
         // 1) TradingView feed for everything that is not plain Binance crypto
         if (useTv) {
@@ -245,21 +259,8 @@ object Market {
             }
         }
 
-        // 2) Regular providers for whatever is still missing
+        // 2) Yahoo for whatever the TradingView feed did not deliver
         val rest = symbols.filter { !out.containsKey(it) }
-        val jobs = ArrayList<Deferred<Unit>>()
-
-        val bin = rest.filter { route(it) == Route.BINANCE }
-        if (bin.isNotEmpty()) {
-            jobs.add(async(Dispatchers.IO) {
-                val res = fetchBinance(bin.map { baseOf(it) }.distinct())
-                for (s in bin) {
-                    val q = res[baseOf(s)]
-                    if (q != null) out[s] = q
-                }
-                Unit
-            })
-        }
         for (s in rest.filter { route(it) == Route.YAHOO }) {
             jobs.add(async(Dispatchers.IO) {
                 val q = fetchYahooCached(s)

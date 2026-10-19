@@ -1,6 +1,9 @@
 package com.example.traderlauncher
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -58,6 +61,11 @@ object TvFeed {
     private val ticks = ConcurrentHashMap<String, Tick>()
     private val bad = ConcurrentHashMap.newKeySet<String>() // symbols rejected by the server
     private val session = "qs_" + (1..12).map { ('a'..'z').random() }.joinToString("")
+
+    private val _updates = MutableStateFlow(0L)
+
+    /** Increments on every received tick. Collect it (it conflates) to refresh the UI without polling. */
+    val updates: StateFlow<Long> = _updates
 
     // ---------- public api ----------
 
@@ -186,6 +194,7 @@ object TvFeed {
                 if (v.has("lp") && !v.isNull("lp")) t.lp = v.getDouble("lp")
                 if (v.has("chp") && !v.isNull("chp")) t.chp = v.getDouble("chp")
                 t.ts = System.currentTimeMillis()
+                _updates.update { it + 1 }
             }
             "critical_error", "protocol_error" -> lastError = p.take(200)
         }

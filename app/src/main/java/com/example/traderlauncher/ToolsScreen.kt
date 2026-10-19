@@ -70,7 +70,7 @@ private val CHECKLIST = listOf(
 
 /** Full-screen overlay opened from the toolbar: position calculator, pre-trade checklist, settings, links. */
 @Composable
-fun ToolsScreen(store: Store, onClose: () -> Unit) {
+fun ToolsScreen(store: Store, isDefault: Boolean, onSetDefault: () -> Unit, onClose: () -> Unit) {
     val ctx = LocalContext.current
     var balance by remember { mutableStateOf(store.getStr("c_bal", "")) }
     var riskPct by remember { mutableStateOf(store.getStr("c_risk", "1")) }
@@ -108,6 +108,25 @@ fun ToolsScreen(store: Store, onClose: () -> Unit) {
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            Section("Home screen", R.drawable.ic_apps) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(if (isDefault) "Default launcher" else "Not the default launcher", fontSize = 13.sp)
+                        Text(
+                            if (isDefault) "The Home button opens this app."
+                            else "Set it as default so the Home button opens this app.",
+                            fontSize = 11.sp,
+                            color = Muted
+                        )
+                    }
+                    if (!isDefault) {
+                        OutlinedButton(onClick = onSetDefault) { Text("Set default", fontSize = 12.sp) }
+                    } else {
+                        Ico(R.drawable.ic_check, tint = Green, size = 20.dp)
+                    }
+                }
+            }
+
             Section("Position size calculator", R.drawable.ic_calculator) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumField("Balance", balance, Modifier.weight(1f)) { balance = it; store.putStr("c_bal", it) }

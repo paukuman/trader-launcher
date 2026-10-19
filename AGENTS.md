@@ -32,7 +32,7 @@ architecture, conventions, symbol syntax, or the delivery workflow.
 
 | File | Responsibility |
 |---|---|
-| `MainActivity.kt` | Activity (HOME launcher), `AppState`, `Root()` composable: `TopBar` (tab switcher), pager (3 pages), tools overlay, chart overlay, all top-level state and callbacks, back handling, 5 s quote refresh loop |
+| `MainActivity.kt` | Activity (HOME launcher), `AppState`, `Root()` composable: `TopBar` (tab switcher), pager (3 pages), tools overlay, chart overlay, all top-level state and callbacks, back handling, 3 s poll loop (Binance / Yahoo / fallback) plus push updates from `TvFeed.updates`, default-launcher banner and role request |
 | `HomeScreen.kt` | Page 0 (Markets): compact clock + market sessions (`ClockHeader`), category chips (All/Forex/Commodities/Crypto/Stocks/Indices), watchlist (`PairRow`), add dialog with one-tap suggestions, remove dialog |
 | `JournalScreen.kt` | Page 1: trade list with All/Open/Wins/Losses filter, stats, equity curve (Canvas), `TradeDialog`, CSV export, shared form widgets (`NumField`, `Seg`, `StatBox`) |
 | `ToolsScreen.kt` | Full-screen overlay opened from the top bar: position size calculator, pre-trade checklist, price source switch, quick links |
@@ -58,6 +58,8 @@ Home button while open -> `onNewIntent` -> `AppState.homeSignal++` -> closes ove
 | `journal` | JSON array of `Trade` |
 | `c_bal`, `c_risk` | calculator balance / risk % |
 | `cat` | selected watchlist category (`Cat` enum name, empty = All) |
+| `chart_engine` | `0` = TradingView embed script (default), `1` = direct widget page |
+| `dl_hide` | `1` after the user dismisses the "make this your home screen" banner |
 
 Adding a persisted field: extend `Trade` + `toJson` + `tradeFromJson` with a backward-compatible default.
 

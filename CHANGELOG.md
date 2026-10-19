@@ -10,6 +10,7 @@ The CI uses the section matching the pushed tag (`vX.Y.Z`) as GitHub Release not
 
 ### Added
 
+- Default launcher: banner on first run and a "Home screen" section in Tools that requests the HOME role (system settings fallback).
 - Top pill switcher (Markets / Journal / Apps) synced with the pager; calculator icon opens the Tools overlay.
 - Markets: category filter chips (All, Forex, Commodities, Crypto, Stocks, Indices) via `Cat` / `Market.category`; selected category is persisted (`cat`).
 - Markets: add dialog with one-tap suggestions per category; change-% pill and category badge on each row.
@@ -19,6 +20,10 @@ The CI uses the section matching the pushed tag (`vX.Y.Z`) as GitHub Release not
 
 ### Changed
 
+- TradingView prices now appear as soon as a tick arrives (`TvFeed.updates`, UI refresh capped at about 4/s) instead of waiting for the next poll; the poll loop runs every 3 s instead of 5 s.
+- `Market.fetch` starts Binance crypto before waiting on TradingView, so crypto no longer waits for the TV first-tick timeout.
+- App icons are decoded once on a background thread and cached (`loadApps`), which fixes the stutter when fast-scrolling the Apps grid.
+- Chart screen: loading spinner, error message, third-party cookies enabled for the embedded widget, console errors shown, reload button and a Widget/Direct engine switch.
 - Whole UI redesigned: green accent, compact density, translucent green-black gradient, rounded cards.
 - All in-app text is now English; `AGENTS.md` updated accordingly.
 - Tools moved from page 3 to a full-screen overlay; Apps is now page 3.

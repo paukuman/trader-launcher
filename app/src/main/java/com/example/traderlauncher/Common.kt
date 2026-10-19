@@ -3,6 +3,7 @@ package com.example.traderlauncher
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.Image
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.util.concurrent.ConcurrentHashMap
 
 // Palette: deep green-black surfaces, emerald accent. Positive = Green, negative = Red.
 val BgTop = Color(0xF2071A12)
@@ -123,15 +126,36 @@ fun fmtN(d: Double): String {
 fun String.toNum(): Double? =
     trim().replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() }
 
-data class AppEntry(val label: String, val pkg: String, val activity: String)
+/** [icon] is decoded off the main thread in [loadApps]; decoding while scrolling made the app grid stutter. */
+data class AppEntry(val label: String, val pkg: String, val activity: String, val icon: ImageBitmap? = null)
 
+private val iconCache = ConcurrentHashMap<String, ImageBitmap>()
+
+/** Call from a background thread. Icons are cached, so only newly installed apps are decoded again. */
 fun loadApps(ctx: Context): List<AppEntry> {
     val pm = ctx.packageManager
     val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
     return pm.queryIntentActivities(i, 0)
-        .map { AppEntry(it.loadLabel(pm).toString(), it.activityInfo.packageName, it.activityInfo.name) }
-        .filter { it.pkg != ctx.packageName }
+        .filter { it.activityInfo.packageName != ctx.packageName }
+        .map { ri ->
+            val pkg = ri.activityInfo.packageName
+            val act = ri.activityInfo.name
+            val key = "$pkg/$act"
+            val icon = iconCache[key] ?: try {
+                ri.loadIcon(pm).toBitmap(128, 128).asImageBitmap().also { iconCache[key] = it }
+            } catch (e: Exception) {
+                null
+            }
+            AppEntry(ri.loadLabel(pm).toString(), pkg, act, icon)
+        }
         .sortedBy { it.label.lowercase() }
+}
+
+/** True when this app is the current HOME app. */
+fun isDefaultLauncher(ctx: Context): Boolean {
+    val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+    val ri = ctx.packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)
+    return ri?.activityInfo?.packageName == ctx.packageName
 }
 
 fun launchApp(ctx: Context, app: AppEntry) {
@@ -159,8 +183,10 @@ fun openUrl(ctx: Context, url: String) {
 @Composable
 fun AppIcon(app: AppEntry, size: Dp) {
     val ctx = LocalContext.current
-    val bmp = remember(app.pkg, app.activity) {
-        try {
+    val pre = app.icon
+    // Normally the icon is preloaded; the UI-thread decode below is only a fallback.
+    val bmp = remember(app.pkg, app.activity, pre) {
+        pre ?: try {
             ctx.packageManager
                 .getActivityIcon(ComponentName(app.pkg, app.activity))
                 .toBitmap(128, 128)

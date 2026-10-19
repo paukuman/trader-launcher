@@ -2,13 +2,18 @@
 
 package com.example.traderlauncher
 
+import android.app.role.RoleManager
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
@@ -136,6 +141,38 @@ fun TopBar(state: PagerState, onTab: (Int) -> Unit, onTools: () -> Unit) {
     }
 }
 
+/** One-time hint shown while this app is not the default home app. */
+@Composable
+fun DefaultBanner(onSet: () -> Unit, onHide: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .card(12.dp)
+            .padding(start = 12.dp, top = 6.dp, bottom = 6.dp, end = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "Make this your home screen",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            "Set default",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = OnAccent,
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(Accent)
+                .clickable(onClick = onSet)
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+        IconButton(onClick = onHide) { Ico(R.drawable.ic_close, tint = Muted, size = 18.dp) }
+    }
+}
+
 @Composable
 fun Root(store: Store) {
     val ctx = LocalContext.current
@@ -151,6 +188,9 @@ fun Root(store: Store) {
     val trades = remember { mutableStateListOf<Trade>().apply { addAll(store.loadTrades()) } }
     var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     var pinned by remember { mutableStateOf(store.getPinned()) }
+    var isDefault by remember { mutableStateOf(isDefaultLauncher(ctx)) }
+    var bannerHidden by remember { mutableStateOf(store.getStr("dl_hide", "0") == "1") }
+    var roleAsked by remember { mutableStateOf(false) }
 
     val resumed = AppState.resumed
     val signal = AppState.homeSignal
@@ -173,17 +213,48 @@ fun Root(store: Store) {
     BackHandler { handleBack() } // always consumed: a launcher must never close
 
     LaunchedEffect(resumed) {
-        if (resumed) apps = withContext(Dispatchers.IO) { loadApps(ctx) } else TvFeed.close()
+        if (resumed) {
+            isDefault = isDefaultLauncher(ctx)
+            val fresh = withContext(Dispatchers.IO) { loadApps(ctx) }
+            if (fresh != apps) apps = fresh // keep the same list when nothing changed: no needless grid churn
+        } else {
+            TvFeed.close()
+        }
     }
 
-    // Auto refresh quotes every 5 s while the launcher is visible
+    // Poll Binance / Yahoo / fallback sources every 3 s while the launcher is visible.
     val watchKey = watch.joinToString(",")
     LaunchedEffect(resumed, watchKey) {
         if (resumed) {
             while (true) {
                 val syms = watch.toList()
-                if (syms.isNotEmpty()) quotes.putAll(Market.fetch(syms))
-                delay(5000)
+                if (syms.isNotEmpty()) {
+                    for ((k, v) in Market.fetch(syms)) {
+                        val cur = quotes[k]
+                        // A live TradingView tick is newer than any polled value fetched a moment ago.
+                        if (cur != null && cur.src == "TradingView" && v.src != "TradingView" &&
+                            Market.useTv && TvFeed.healthy()) continue
+                        if (cur != v) quotes[k] = v
+                    }
+                }
+                delay(3000)
+            }
+        }
+    }
+
+    // TradingView ticks are pushed over the websocket: show them immediately instead of waiting for the next
+    // poll. The StateFlow conflates, and the delay caps UI updates at about 4 per second.
+    LaunchedEffect(resumed, watchKey) {
+        if (resumed) {
+            TvFeed.updates.collect {
+                if (Market.useTv) {
+                    for (s in watch.toList()) {
+                        if (Market.route(s) == Route.BINANCE) continue
+                        val q = TvFeed.quote(Market.tvSymbol(s)) ?: continue
+                        if (quotes[s] != q) quotes[s] = q
+                    }
+                }
+                delay(250)
             }
         }
     }
@@ -224,6 +295,26 @@ fun Root(store: Store) {
         }
     }
 
+    val homeRole = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        isDefault = isDefaultLauncher(ctx)
+    }
+
+    fun requestDefault() {
+        val rm = if (Build.VERSION.SDK_INT >= 29) ctx.getSystemService(RoleManager::class.java) else null
+        if (!roleAsked && rm != null && rm.isRoleAvailable(RoleManager.ROLE_HOME) && !rm.isRoleHeld(RoleManager.ROLE_HOME)) {
+            roleAsked = true
+            homeRole.launch(rm.createRequestRoleIntent(RoleManager.ROLE_HOME))
+        } else {
+            // Older Android, or the role dialog was already shown (Android stops asking after a decline):
+            // send the user to the system "Default home app" screen.
+            try {
+                ctx.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "Open Settings > Apps > Default apps > Home app", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     fun saveTrade(t: Trade) {
         val i = trades.indexOfFirst { it.id == t.id }
         if (i >= 0) trades[i] = t else trades.add(0, t)
@@ -246,6 +337,15 @@ fun Root(store: Store) {
                 onTab = { i -> scope.launch { pagerState.animateScrollToPage(i) } },
                 onTools = { toolsOpen = true }
             )
+            if (!isDefault && !bannerHidden) {
+                DefaultBanner(
+                    onSet = { requestDefault() },
+                    onHide = {
+                        bannerHidden = true
+                        store.putStr("dl_hide", "1")
+                    }
+                )
+            }
             HorizontalPager(state = pagerState, modifier = Modifier.weight(1f)) { page ->
                 when (page) {
                     0 -> HomeScreen(
@@ -283,9 +383,14 @@ fun Root(store: Store) {
             enter = slideInVertically(initialOffsetY = { it }),
             exit = slideOutVertically(targetOffsetY = { it })
         ) {
-            ToolsScreen(store = store, onClose = { toolsOpen = false })
+            ToolsScreen(
+                store = store,
+                isDefault = isDefault,
+                onSetDefault = { requestDefault() },
+                onClose = { toolsOpen = false }
+            )
         }
 
-        chartSym?.let { s -> ChartScreen(sym = s, onClose = { chartSym = null }) }
+        chartSym?.let { s -> ChartScreen(sym = s, store = store, onClose = { chartSym = null }) }
     }
 }
