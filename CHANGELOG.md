@@ -8,8 +8,15 @@ The CI uses the section matching the pushed tag (`vX.Y.Z`) as GitHub Release not
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
 ### Added
 
+- Price alerts: set a level (above / below) with an optional custom message; one notification when price reaches it, then the alert can be re-armed. Long-press a pair, or use the bell in the top bar.
+- SL / TP alerts: open journal trades with a stop loss or take profit notify you when price touches either level; the trade shows an SL HIT / TP HIT tag. Wrong-side levels are ignored.
+- Notification settings: separate sound for price and SL/TP alerts (system ringtone picker), vibration, loud mode (alarm volume), test buttons, notification permission prompt.
+- `MonitorService` (foreground, `specialUse`) keeps the price feed alive while alerts or SL/TP targets exist, stops itself when nothing is left to watch, restarts after boot. Optional reliable mode (partial wake lock) and a battery optimisation shortcut.
+- Release builds: R8 minify and resource shrinking, optional real signing key from CI secrets; debug APK is still published as a fallback artifact.
 - Default launcher: banner on first run and a "Home screen" section in Tools that requests the HOME role (system settings fallback).
 - Top pill switcher (Markets / Journal / Apps) synced with the pager; calculator icon opens the Tools overlay.
 - Markets: category filter chips (All, Forex, Commodities, Crypto, Stocks, Indices) via `Cat` / `Market.category`; selected category is persisted (`cat`).
@@ -20,6 +27,8 @@ The CI uses the section matching the pushed tag (`vX.Y.Z`) as GitHub Release not
 
 ### Changed
 
+- CI builds `assembleRelease` (artifact `TraderLauncher`) after `assembleDebug` (artifact `TraderLauncher-debug`); `tools/ship.sh` downloads the release APK.
+- Version bumped to 0.4.0 (versionCode 4).
 - TradingView prices now appear as soon as a tick arrives (`TvFeed.updates`, UI refresh capped at about 4/s) instead of waiting for the next poll; the poll loop runs every 3 s instead of 5 s.
 - `Market.fetch` starts Binance crypto before waiting on TradingView, so crypto no longer waits for the TV first-tick timeout.
 - App icons are decoded once on a background thread and cached (`loadApps`), which fixes the stutter when fast-scrolling the Apps grid.

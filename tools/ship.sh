@@ -20,11 +20,13 @@ run_id="$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId')"
 echo "Watching run $run_id ..."
 if gh run watch "$run_id" --exit-status; then
   rm -rf dist
-  gh run download "$run_id" -n TraderLauncher-debug -D dist
+  gh run download "$run_id" -n TraderLauncher -D dist
   if [ -d "$HOME/storage/downloads" ]; then cp dist/TraderLauncher.apk "$HOME/storage/downloads/"; fi
   echo "OK -> dist/TraderLauncher.apk (also copied to ~/storage/downloads if available)"
 else
   echo "BUILD FAILED. Send this output to the AI:"
   echo "  gh run view $run_id --log-failed"
+  echo "If only the release step failed, the debug build may still be downloadable:"
+  echo "  gh run download $run_id -n TraderLauncher-debug -D dist"
   exit 1
 fi

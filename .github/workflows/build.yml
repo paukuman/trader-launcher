@@ -24,15 +24,42 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Build debug APK
+      - name: Build debug APK (fallback)
         run: gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk TraderLauncher.apk
+      - name: Stage debug APK
+        run: mkdir -p out && cp app/build/outputs/apk/debug/app-debug.apk out/TraderLauncher-debug.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: TraderLauncher-debug
+          path: out/TraderLauncher-debug.apk
+
+      - name: Prepare signing key (optional)
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Using the release keystore from secrets"
+          else
+            echo "No KEYSTORE_BASE64 secret: the release APK is signed with the debug key"
+          fi
+
+      - name: Build release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk TraderLauncher.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TraderLauncher
           path: TraderLauncher.apk
 
       - name: Extract release notes from CHANGELOG (tag only)

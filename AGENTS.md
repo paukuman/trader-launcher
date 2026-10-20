@@ -37,10 +37,12 @@ architecture, conventions, symbol syntax, or the delivery workflow.
 | `JournalScreen.kt` | Page 1: trade list with All/Open/Wins/Losses filter, stats, equity curve (Canvas), `TradeDialog`, CSV export, shared form widgets (`NumField`, `Seg`, `StatBox`) |
 | `ToolsScreen.kt` | Full-screen overlay opened from the top bar: position size calculator, pre-trade checklist, price source switch, quick links |
 | `AppsScreen.kt` | Page 2 (Apps): search, pinned row (max 5), app grid, long-press menu: pin/info/uninstall |
-| `ChartScreen.kt` | Full-screen overlay with the TradingView widget inside a WebView |
+| `ChartScreen.kt` | Full-screen overlay with the TradingView widget inside a WebView (Widget / Direct engine switch, spinner, error and console text) |
 | `Market.kt` | Symbol parsing/routing + providers (Binance, Yahoo, open.er-api), priority logic in `fetch`, `fmtPrice` |
 | `TvFeed.kt` | Unofficial TradingView websocket quote feed (OkHttp): connect, subscribe, parse `qsd`, heartbeat, status |
-| `Data.kt` | `Trade` model, JSON (de)serialization, `Store` (SharedPreferences) |
+| `Data.kt` | `Trade` and `PriceAlert` models, JSON (de)serialization, `Store` (SharedPreferences) |
+| `Alerts.kt` | `AlertRepo` (process-wide alert + SL/TP hit state, shared by UI and service), `AlertEngine` (decides when an alert fires; call `evaluate` with fresh quotes from anywhere), `Notifier` (channels, sounds, notifications), `MonitorService` (foreground service) and `BootReceiver` |
+| `AlertsUi.kt` | `AlertEditDialog` (new price alert) and the full-screen `AlertsScreen` overlay (alert list, SL/TP switch, sounds, vibration, loud mode, background and battery settings) |
 | `Common.kt` | Colors, theme, `Ico`, `AppIcon`, app listing/launching helpers, `fmtN`, `toNum` |
 
 Other: `.github/workflows/build.yml` (CI), `tools/ship.sh` (deliver), `CHANGELOG.md`, `AGENTS.md`.
@@ -59,6 +61,9 @@ Home button while open -> `onNewIntent` -> `AppState.homeSignal++` -> closes ove
 | `c_bal`, `c_risk` | calculator balance / risk % |
 | `cat` | selected watchlist category (`Cat` enum name, empty = All) |
 | `chart_engine` | `0` = TradingView embed script (default), `1` = direct widget page |
+| `alerts`, `hits` | JSON: price alerts; tradeId -> 1 (SL hit) / 2 (TP hit). Owned by `AlertRepo`, do not write them elsewhere |
+| `snd_price`, `snd_risk`, `vib`, `loud` | notification sound URI (empty = default), vibration, alarm-volume mode |
+| `sltp_on`, `mon_on`, `mon_wake` | SL/TP alerts on/off, background service on/off, partial wake lock (reliable mode) |
 | `dl_hide` | `1` after the user dismisses the "make this your home screen" banner |
 
 Adding a persisted field: extend `Trade` + `toJson` + `tradeFromJson` with a backward-compatible default.
@@ -104,6 +109,27 @@ External response shapes you rely on (verify if something breaks):
 - Dialogs: `AlertDialog` with `TextButton`s. Numeric inputs: `NumField` (decimal keyboard, accepts comma).
 - No new screens as separate Activities; add pages to the pager or overlays in `Root`.
 
+### Alerts and background work
+
+- Alerts live in `AlertRepo` (not in Compose state) because `MonitorService` must keep working after the Activity is gone.
+  Mutate alerts only through `AlertRepo`, and call `MonitorService.sync(ctx)` afterwards so the service starts or stops.
+- `AlertEngine.evaluate(ctx, quotes)` is idempotent: `AlertRepo.fire` / `markHit` return true only once, so evaluating from the
+  service and from the UI at the same time never notifies twice.
+- Open trades with SL/TP are read fresh from `Store` (cached 1.5 s). After saving or deleting a trade call
+  `AlertEngine.invalidateTrades()` and `AlertRepo.clearHit(id)`.
+- A channel's sound cannot change after creation: `Notifier.channel` puts a signature of sound + vibration + loud mode in the channel
+  id and deletes older ones. Never create alert channels anywhere else.
+- Do not call `TvFeed.close()` while `MonitorService.running` (the service shares the websocket).
+- The service type is `specialUse` (manifest declares the subtype property). Starting it from the background can throw on Android 12+,
+  so `MonitorService.sync` swallows that and retries on the next app open.
+
+## Signing
+
+Release is signed with the key in CI secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` when present, otherwise
+with the debug key (a new one per CI run, so updates over an older install fail with "App not installed"). Android refuses to update an
+app signed with a different key, so the first switch to a stable key needs an uninstall, which wipes local data: warn the owner and
+make sure the journal is exported first. Never commit a keystore (this repo is public).
+
 ## 7. How to make a change (protocol)
 
 1. Read the relevant files fully first. Prefer editing existing code over adding abstractions.
@@ -130,10 +156,28 @@ bash tools/ship.sh "feat(scope): summary" v0.3.0                    # also publi
 Commit messages: Conventional Commits in English: `feat|fix|refactor|docs|chore|build|ci(scope): summary`
 (imperative, <= 72 chars, optional body explaining why). One logical change per commit when possible.
 
-CI (`.github/workflows/build.yml`): on push to `main`, on `v*` tags, and manually. Builds `assembleDebug`, uploads artifact
-`TraderLauncher-debug` (file `TraderLauncher.apk`). On tags it also creates a GitHub Release with notes taken from `CHANGELOG.md`.
+CI (`.github/workflows/build.yml`): on push to `main`, on `v*` tags, and manually. Builds `assembleDebug` first (artifact
+`TraderLauncher-debug`, a fallback), then `assembleRelease` (R8 minified; artifact `TraderLauncher`, file `TraderLauncher.apk`, the one
+`ship.sh` downloads). On tags it also creates a GitHub Release with notes taken from `CHANGELOG.md`.
 
 If CI fails, ask the owner to run `gh run view <id> --log-failed` and paste the output, then fix exactly that.
+
+### Every delivery (standing rule from the owner)
+
+When you deliver a zip you must also: (1) send the exact terminal commands to apply it (bash for Termux, plus fish if the owner is
+on a laptop), picking the newest zip automatically; (2) add an entry at the top of `NOTES.md` inside the zip: what changed, what was
+not verified, how to test, risks, next candidates. Keep `CHANGELOG.md` for the formal list.
+
+Standard Termux block:
+
+```bash
+cd ~/TraderLauncher && git pull --rebase
+zip=$(ls -t ~/storage/downloads/TraderLauncher*.zip | head -1); echo "Using $zip"
+rm -rf ~/tl-new && mkdir ~/tl-new && unzip -oq "$zip" -d ~/tl-new
+rm -rf app/src && cp -r ~/tl-new/TraderLauncher/. .
+git status --short
+bash tools/ship.sh "<conventional commit message>"
+```
 
 ## 9. How to respond to the owner
 
@@ -147,5 +191,5 @@ If CI fails, ask the owner to run `gh run view <id> --log-failed` and paste the 
 ## 10. Known limitations / ideas
 
 - Forex fallback is daily-only; Yahoo is unofficial. Real-time broker data would need the owner's own API key (store in app settings, never in git).
-- Idea backlog: price alerts (foreground service + notification), widgets, per-setup stats in the journal,
+- Idea backlog: journal backup/restore (JSON), widgets, per-setup stats in the journal,
   journal backup (file/Drive), drag-to-reorder watchlist, per-pair notes.

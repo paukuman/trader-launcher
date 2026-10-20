@@ -162,6 +162,13 @@ fun TradeDialog(
                 NumField("Entry", entry) { entry = it }
                 NumField("Stop loss", sl) { sl = it }
                 NumField("Take profit", tp) { tp = it }
+                if (result == 0) {
+                    Text(
+                        "While this trade is open, you get an alert when price touches the stop loss or take profit.",
+                        fontSize = 11.sp,
+                        color = Muted
+                    )
+                }
                 Text("Result", fontSize = 12.sp, color = Muted)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Seg("Open", result == 0, Modifier.weight(1f)) { result = 0 }
@@ -226,7 +233,7 @@ fun TradeDialog(
 }
 
 @Composable
-fun TradeItem(t: Trade, onClick: () -> Unit) {
+fun TradeItem(t: Trade, hit: Int, onClick: () -> Unit) {
     val df = remember { SimpleDateFormat("d MMM HH:mm", Locale.ENGLISH) }
     val p = t.pnl
     val stripe = if (p == null) Accent else if (p >= 0) Green else Red
@@ -249,6 +256,14 @@ fun TradeItem(t: Trade, onClick: () -> Unit) {
                             fontWeight = FontWeight.Bold,
                             color = if (t.isLong) Green else Red
                         )
+                        if (hit != 0) {
+                            Text(
+                                if (hit == 1) "  SL HIT" else "  TP HIT",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (hit == 1) Red else Green
+                            )
+                        }
                     }
                     Text(df.format(Date(t.time)), fontSize = 10.5.sp, color = Muted)
                 }
@@ -307,6 +322,7 @@ private fun EquityCurve(points: List<Double>, modifier: Modifier = Modifier) {
 @Composable
 fun JournalScreen(
     trades: List<Trade>,
+    hits: Map<Long, Int>,
     onSave: (Trade) -> Unit,
     onDelete: (Long) -> Unit
 ) {
@@ -389,7 +405,7 @@ fun JournalScreen(
             contentPadding = PaddingValues(bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            items(shown, key = { it.id }) { t -> TradeItem(t) { editing = t } }
+            items(shown, key = { it.id }) { t -> TradeItem(t, hits[t.id] ?: 0) { editing = t } }
             if (shown.isEmpty()) {
                 item {
                     Column(

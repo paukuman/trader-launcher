@@ -56,6 +56,41 @@ fun tradeFromJson(o: JSONObject) = Trade(
     note = o.optString("note", "")
 )
 
+data class PriceAlert(
+    val id: Long,
+    val symbol: String,
+    val level: Double,
+    val above: Boolean,
+    val note: String = "",
+    val active: Boolean = true,
+    val firedAt: Long = 0L,
+    val firedPrice: Double = 0.0
+)
+
+fun PriceAlert.toJson(): JSONObject {
+    val o = JSONObject()
+    o.put("id", id)
+    o.put("symbol", symbol)
+    o.put("level", level)
+    o.put("above", above)
+    o.put("note", note)
+    o.put("active", active)
+    o.put("firedAt", firedAt)
+    o.put("firedPrice", firedPrice)
+    return o
+}
+
+fun alertFromJson(o: JSONObject) = PriceAlert(
+    id = o.getLong("id"),
+    symbol = o.getString("symbol"),
+    level = o.getDouble("level"),
+    above = o.getBoolean("above"),
+    note = o.optString("note", ""),
+    active = o.optBoolean("active", true),
+    firedAt = o.optLong("firedAt", 0L),
+    firedPrice = o.optDouble("firedPrice", 0.0)
+)
+
 class Store(context: Context) {
     private val p = context.getSharedPreferences("trader", Context.MODE_PRIVATE)
 
@@ -84,6 +119,29 @@ class Store(context: Context) {
         val arr = JSONArray()
         list.forEach { arr.put(it.toJson()) }
         p.edit().putString("journal", arr.toString()).apply()
+    }
+
+    fun loadAlerts(): List<PriceAlert> {
+        val arr = JSONArray(p.getString("alerts", "[]") ?: "[]")
+        return (0 until arr.length()).map { alertFromJson(arr.getJSONObject(it)) }
+    }
+
+    fun saveAlerts(list: List<PriceAlert>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(it.toJson()) }
+        p.edit().putString("alerts", arr.toString()).apply()
+    }
+
+    /** tradeId -> 1 (stop loss hit) or 2 (take profit hit). */
+    fun loadHits(): Map<Long, Int> {
+        val o = JSONObject(p.getString("hits", "{}") ?: "{}")
+        return o.keys().asSequence().associate { it.toLong() to o.getInt(it) }
+    }
+
+    fun saveHits(m: Map<Long, Int>) {
+        val o = JSONObject()
+        m.forEach { (k, v) -> o.put(k.toString(), v) }
+        p.edit().putString("hits", o.toString()).apply()
     }
 
     fun getStr(k: String, def: String): String = p.getString(k, def) ?: def

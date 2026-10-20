@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 
 @Composable
-private fun Section(title: String, icon: Int, content: @Composable () -> Unit) {
+fun Section(title: String, icon: Int, content: @Composable () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()

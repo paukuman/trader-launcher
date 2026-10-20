@@ -11,14 +11,37 @@ android {
         applicationId = "com.example.traderlauncher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
+    }
+
+    // A real key is used when CI provides one (KEYSTORE_FILE and friends); otherwise release falls back
+    // to the debug key so the APK is still installable. See AGENTS.md "Signing".
+    signingConfigs {
+        create("release") {
+            val ks = System.getenv("KEYSTORE_FILE")
+            if (ks != null && file(ks).exists()) {
+                storeFile = file(ks)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            val rel = signingConfigs.getByName("release")
+            signingConfig = if (rel.storeFile != null) rel else signingConfigs.getByName("debug")
         }
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

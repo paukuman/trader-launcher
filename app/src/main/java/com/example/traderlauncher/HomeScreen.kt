@@ -145,7 +145,7 @@ private fun CategoryRow(selected: Cat?, onSelect: (Cat?) -> Unit) {
 }
 
 @Composable
-fun PairRow(sym: String, q: Quote?, onClick: () -> Unit, onLong: () -> Unit) {
+fun PairRow(sym: String, q: Quote?, bell: Boolean, onClick: () -> Unit, onLong: () -> Unit) {
     val base = Market.baseOf(sym)
     val fx = Market.isFxBase(base)
     val cat = Market.category(sym)
@@ -173,12 +173,18 @@ fun PairRow(sym: String, q: Quote?, onClick: () -> Unit, onLong: () -> Unit) {
             Text(cat.tag, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Accent)
         }
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
-            Text(
-                if (fx) base.take(3) + "/" + base.drop(3) else base,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                maxLines = 1
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (fx) base.take(3) + "/" + base.drop(3) else base,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    maxLines = 1
+                )
+                if (bell) {
+                    Spacer(Modifier.width(5.dp))
+                    Ico(R.drawable.ic_bell, tint = Accent, size = 12.dp)
+                }
+            }
             Text(
                 (if (pre.isNotEmpty()) "$pre · " else "") + src,
                 fontSize = 10.5.sp,
@@ -286,8 +292,10 @@ fun HomeScreen(
     quotes: Map<String, Quote>,
     cat: Cat?,
     onCat: (Cat?) -> Unit,
+    alerts: List<PriceAlert>,
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
+    onAlert: (String) -> Unit,
     onOpenChart: (String) -> Unit
 ) {
     var showAdd by remember { mutableStateOf(false) }
@@ -330,6 +338,7 @@ fun HomeScreen(
                 PairRow(
                     sym = sym,
                     q = quotes[sym],
+                    bell = alerts.any { it.active && it.symbol == normSymbol(sym) },
                     onClick = { onOpenChart(sym) },
                     onLong = { toRemove = sym }
                 )
@@ -367,7 +376,13 @@ fun HomeScreen(
             onDismissRequest = { toRemove = null },
             containerColor = Surface2,
             title = { Text(s) },
-            text = { Text("Remove from watchlist?") },
+            text = {
+                TextButton(onClick = { toRemove = null; onAlert(s) }) {
+                    Ico(R.drawable.ic_bell, tint = Accent, size = 18.dp)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Set price alert")
+                }
+            },
             confirmButton = {
                 TextButton(onClick = { onRemove(s); toRemove = null }) {
                     Ico(R.drawable.ic_delete, tint = Red, size = 18.dp)
