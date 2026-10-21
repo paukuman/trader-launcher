@@ -6,6 +6,7 @@ Android home-screen app for traders. Swipe between pages, tap a pair for a Tradi
 - **Journal**: trade journal with stats, equity curve, filters and CSV export
 - **Apps**: searchable app grid with a pinned row for trading apps
 - **Alerts** (bell icon in the top bar): price alerts with custom message and sound, SL / TP alerts for open journal trades, background monitoring
+- **Updates and backup** (Tools): in-app update from GitHub Releases, JSON backup and restore
 - **Tools** (calculator icon in the top bar): position size calculator, pre-trade checklist, price source switch, quick links
 - Swipe between the three pages or tap the pill at the top; no bottom bar
 

@@ -8,6 +8,18 @@ The CI uses the section matching the pushed tag (`vX.Y.Z`) as GitHub Release not
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-20
+
+### Added
+
+- Backup & restore (Tools): save a JSON backup (journal, alerts, watchlist, settings) to any location with the system file picker; restore from a file or pasted text. Older journal CSV exports can be imported too (trades are added, duplicates skipped).
+- In-app update from GitHub Releases: banner when a newer release exists, "Check now" and automatic check at most every 6 hours (Tools -> App update), download with progress, then the system installer.
+- `tools/make-keystore.sh`: one-time creation of the permanent signing key, stored in GitHub Secrets.
+
+### Changed
+
+- CI passes `-Pvc` (run number + 100, always increasing) and `-Pvn` (the tag) to Gradle; tagged builds refuse to run without the permanent key. `tools/ship.sh` keeps `versionName` in `build.gradle.kts` equal to the tag.
+
 ## [0.4.0] - 2026-10-20
 
 ### Added

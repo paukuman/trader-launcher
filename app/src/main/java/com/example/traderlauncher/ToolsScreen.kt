@@ -70,7 +70,7 @@ private val CHECKLIST = listOf(
 
 /** Full-screen overlay opened from the toolbar: position calculator, pre-trade checklist, settings, links. */
 @Composable
-fun ToolsScreen(store: Store, isDefault: Boolean, onSetDefault: () -> Unit, onClose: () -> Unit) {
+fun ToolsScreen(store: Store, isDefault: Boolean, onSetDefault: () -> Unit, onRestored: () -> Unit, onClose: () -> Unit) {
     val ctx = LocalContext.current
     var balance by remember { mutableStateOf(store.getStr("c_bal", "")) }
     var riskPct by remember { mutableStateOf(store.getStr("c_risk", "1")) }
@@ -126,6 +126,10 @@ fun ToolsScreen(store: Store, isDefault: Boolean, onSetDefault: () -> Unit, onCl
                     }
                 }
             }
+
+            UpdateSection()
+
+            BackupSection(store, onRestored)
 
             Section("Position size calculator", R.drawable.ic_calculator) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

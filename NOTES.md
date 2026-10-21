@@ -3,6 +3,38 @@
 Extra notes for each zip delivered to the owner, newest first. Each entry says what changed, what was **not** verified, how to test it,
 and what to do if it breaks. `CHANGELOG.md` stays the formal list of changes; this file is the practical side.
 
+## 0.5.0 - backup, auto update, permanent signing key (2026-10-20)
+
+**Not verified:** nothing was compiled or run. CI is the first real build.
+
+**One-time migration (needed because the installed app is signed with a throwaway key; the new permanent key cannot update over it)**
+1. In the app you have now: Journal -> share icon -> send the CSV text to yourself (Telegram Saved Messages, WhatsApp "message yourself",
+   email). This is the only way to carry the journal across; alerts and watchlist are not in that CSV.
+2. Run once: `bash tools/make-keystore.sh` (needs `pkg install openjdk-17` and a logged-in `gh`). It creates the key, stores it as GitHub
+   Secrets and writes `~/trader-launcher-release.jks` and `~/trader-launcher-release-password.txt`. **Copy both files to a private
+   place now.** If they are lost the app can never be updated in place again.
+3. Apply the zip and publish a release: `bash tools/ship.sh "feat: backup, auto update, signing" v0.5.0`
+4. Uninstall the old app, install `TraderLauncher.apk` from Downloads, open Tools -> Backup & restore -> Paste (or From file) and import
+   the CSV.
+5. From now on every release updates in place: either the in-app banner (after you publish a tag, e.g. `ship.sh "..." v0.5.1`) or
+   installing the APK from Downloads over the old one.
+
+**Test**
+- Tools -> Backup & restore -> Save backup, then Restore from that file: counts in the dialog should match.
+- Tools -> App update -> Check now. With only v0.5.0 published it should say you are up to date. After publishing v0.5.1 the banner should
+  appear on the next resume (or after Check now), download, and open the system installer. Android asks once to "allow installs from this
+  app".
+- Check the version shown in Tools matches the tag.
+
+**Known limits**
+- Auto update needs the repository (and its releases) to be public. For a private repo the check reports "No public release found".
+- A tag build fails on purpose when the `KEYSTORE_BASE64` secret is missing; push builds still work (signed with a debug key).
+- Debug and release builds use different signing in that case; install the release APK (`TraderLauncher.apk`), not the debug fallback,
+  once the permanent key exists.
+
+**Next candidates:** small journal features (per-setup stats, per-pair notes, screenshots), native candlestick chart with trade and alert
+levels, home-screen widgets (decision pending: host widgets inside the launcher, or provide a widget for other launchers).
+
 ## 0.4.0 - price alerts, SL/TP alerts, release build (2026-10-20)
 
 **Not verified:** nothing was compiled or run (no Android SDK in the authoring sandbox). CI is the first real build. If it is red, send

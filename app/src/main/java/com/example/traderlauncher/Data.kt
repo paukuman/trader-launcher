@@ -144,6 +144,9 @@ class Store(context: Context) {
         p.edit().putString("hits", o.toString()).apply()
     }
 
+    /** Raw value, or null when the key was never written (used by backup). */
+    fun getRaw(k: String): String? = p.getString(k, null)
+
     fun getStr(k: String, def: String): String = p.getString(k, def) ?: def
     fun putStr(k: String, v: String) {
         p.edit().putString(k, v).apply()

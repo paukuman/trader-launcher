@@ -7,6 +7,12 @@ msg="${1:?commit message required, e.g. \"feat(watchlist): add silver\"}"
 tag="${2:-}"
 cd "$(dirname "$0")/.."
 
+# A release keeps versionName in build.gradle.kts equal to the tag, so later builds do not look like older ones.
+if [ -n "$tag" ]; then
+  ver="${tag#v}"
+  sed -i -E "/versionName =/ s/\?: \"[^\"]*\"/?: \"${ver}\"/" app/build.gradle.kts
+fi
+
 git add -A
 git commit -m "$msg"
 git push

@@ -11,8 +11,9 @@ android {
         applicationId = "com.example.traderlauncher"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.4.0"
+        // CI passes -Pvc (always increasing) and -Pvn (the tag) so every build can update the previous one.
+        versionCode = (project.findProperty("vc") as String?)?.toIntOrNull() ?: 5
+        versionName = (project.findProperty("vn") as String?) ?: "0.5.0"
     }
 
     // A real key is used when CI provides one (KEYSTORE_FILE and friends); otherwise release falls back

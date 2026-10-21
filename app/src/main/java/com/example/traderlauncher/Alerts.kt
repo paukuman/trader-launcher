@@ -81,6 +81,14 @@ object AlertRepo {
         }
     }
 
+    /** Replace every alert (backup restore). */
+    fun replaceAlerts(list: List<PriceAlert>) {
+        synchronized(lock) {
+            _alerts.value = list
+            store?.saveAlerts(list)
+        }
+    }
+
     fun rearm(id: Long) {
         synchronized(lock) {
             val l = _alerts.value.map {

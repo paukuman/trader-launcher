@@ -123,12 +123,27 @@ External response shapes you rely on (verify if something breaks):
 - The service type is `specialUse` (manifest declares the subtype property). Starting it from the background can throw on Android 12+,
   so `MonitorService.sync` swallows that and retries on the next app open.
 
-## Signing
+## Signing, versions and updates
 
-Release is signed with the key in CI secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` when present, otherwise
-with the debug key (a new one per CI run, so updates over an older install fail with "App not installed"). Android refuses to update an
-app signed with a different key, so the first switch to a stable key needs an uninstall, which wipes local data: warn the owner and
-make sure the journal is exported first. Never commit a keystore (this repo is public).
+- The permanent key lives only in GitHub Secrets (`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`), created once with
+  `tools/make-keystore.sh`. The owner keeps the `.jks` and password file in a private place. Never commit a keystore (repo is public) and
+  never ask the owner to paste the key or password into chat.
+- Tag builds (`v*`) fail on purpose without the secret. Push builds without it fall back to the debug key (a new one per run), which
+  cannot update an install made with the permanent key.
+- `versionCode` = run number + 100 (`-Pvc`), `versionName` = tag without `v` (`-Pvn`); the defaults in `app/build.gradle.kts` are only for
+  local builds. `tools/ship.sh "msg" vX.Y.Z` also rewrites the default `versionName` to the tag.
+- In-app update (`Updater.kt`) reads `https://api.github.com/repos/paukuman/trader-launcher/releases/latest`, compares `tag_name` with the
+  installed `versionName`, downloads the first `.apk` asset into `cacheDir/updates` (FileProvider `${applicationId}.fileprovider`) and opens
+  the system installer. It only works for a public repo. Release assets must be the APK signed with the permanent key.
+- `Backup.kt`: JSON backup (journal, alerts, watchlist, whitelisted settings; no notification sound URIs) and CSV import. Add new settings
+  keys to `Backup.KEYS` when they should survive a restore.
+
+### Roadmap agreed with the owner (staged, one zip each)
+
+1. 0.5.0 backup, auto update, permanent key (this stage; prerequisite for in-place updates).
+2. Small journal features (per-setup stats, per-pair notes, screenshots) and a native candlestick chart (Binance / Yahoo candles, pan and
+   pinch, entry/SL/TP and alert levels drawn on it).
+3. Home-screen widgets: open question whether to host third-party widgets inside the launcher or ship a widget for other launchers.
 
 ## 7. How to make a change (protocol)
 

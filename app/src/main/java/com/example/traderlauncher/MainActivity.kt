@@ -222,6 +222,7 @@ fun Root(store: Store) {
     val hits by AlertRepo.tradeHits.collectAsState()
     var bannerHidden by remember { mutableStateOf(store.getStr("dl_hide", "0") == "1") }
     var roleAsked by remember { mutableStateOf(false) }
+    var skipVersion by remember { mutableStateOf(store.getStr("upd_skip", "")) }
 
     val resumed = AppState.resumed
     val signal = AppState.homeSignal
@@ -260,6 +261,7 @@ fun Root(store: Store) {
     LaunchedEffect(resumed) {
         if (resumed) {
             isDefault = isDefaultLauncher(ctx)
+            Updater.autoCheck(ctx)
             val fresh = withContext(Dispatchers.IO) { loadApps(ctx) }
             if (fresh != apps) apps = fresh // keep the same list when nothing changed: no needless grid churn
         } else if (!MonitorService.running) {
@@ -375,6 +377,17 @@ fun Root(store: Store) {
         }
     }
 
+    /** After a restore: pull everything that lives in Compose state back from storage. */
+    fun reloadFromStore() {
+        trades.clear()
+        trades.addAll(store.loadTrades())
+        watch.clear()
+        watch.addAll(store.watchlist)
+        pinned = store.getPinned()
+        cat = Cat.values().firstOrNull { it.name == store.getStr("cat", "") }
+        Market.useTv = store.getStr("src_tv", "1") == "1"
+    }
+
     fun saveTrade(t: Trade) {
         val i = trades.indexOfFirst { it.id == t.id }
         if (i >= 0) trades[i] = t else trades.add(0, t)
@@ -411,6 +424,17 @@ fun Root(store: Store) {
                     onHide = {
                         bannerHidden = true
                         store.putStr("dl_hide", "1")
+                    }
+                )
+            }
+            val upd = UpdateState.info
+            if (upd != null && upd.version != skipVersion) {
+                UpdateBanner(
+                    info = upd,
+                    onInstall = { Updater.downloadAndInstall(ctx) },
+                    onSkip = {
+                        skipVersion = upd.version
+                        store.putStr("upd_skip", upd.version)
                     }
                 )
             }
@@ -458,6 +482,7 @@ fun Root(store: Store) {
                 store = store,
                 isDefault = isDefault,
                 onSetDefault = { requestDefault() },
+                onRestored = { reloadFromStore() },
                 onClose = { toolsOpen = false }
             )
         }
