@@ -315,7 +315,7 @@ object Notifier {
         val level = if (code == 1) t.sl else t.tp
         val text = side + " · price " + price(sym, p) + " touched " +
             (if (code == 1) "SL " else "TP ") + (level?.let { fmtN(it) } ?: "") + ". Tap to review the trade."
-        post(ctx, (t.id % 1_000_000_000L).toInt() + 1, "risk", title, text, 1)
+        post(ctx, (t.id % 1_000_000_000L).toInt() + 1, "risk", title, text, Pages.JOURNAL)
     }
 
     fun test(ctx: Context, kind: String) {

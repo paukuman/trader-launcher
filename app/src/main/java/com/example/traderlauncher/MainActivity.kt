@@ -64,11 +64,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** Pager page indexes. */
+object Pages {
+    const val MARKETS = 0
+    const val NEWS = 1
+    const val JOURNAL = 2
+    const val APPS = 3
+}
+
 object AppState {
     var resumed by mutableStateOf(false)
     var homeSignal by mutableIntStateOf(0)
 
-    /** Set by notification taps: page to show (0 Markets, 1 Journal), -1 = none. */
+    /** Set by notification taps: page to show (see [Pages]), -1 = none. */
     var targetPage by mutableIntStateOf(-1)
 }
 
@@ -107,6 +115,7 @@ class MainActivity : ComponentActivity() {
 
 private val TABS = listOf(
     "Markets" to R.drawable.ic_chart,
+    "News" to R.drawable.ic_news,
     "Journal" to R.drawable.ic_journal,
     "Apps" to R.drawable.ic_apps
 )
@@ -129,7 +138,7 @@ fun TopBar(state: PagerState, hasAlerts: Boolean, onTab: (Int) -> Unit, onAlerts
                 val sel = state.currentPage == i
                 Row(
                     Modifier
-                        .weight(1f)
+                        .weight(if (sel) 2.2f else 1f)
                         .clip(CircleShape)
                         .background(if (sel) Accent else Color.Transparent)
                         .clickable { onTab(i) }
@@ -138,13 +147,16 @@ fun TopBar(state: PagerState, hasAlerts: Boolean, onTab: (Int) -> Unit, onAlerts
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Ico(tab.second, tint = if (sel) OnAccent else Muted, size = 16.dp)
-                    Spacer(Modifier.width(5.dp))
-                    Text(
-                        tab.first,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (sel) OnAccent else Muted
-                    )
+                    if (sel) {
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            tab.first,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = OnAccent,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
@@ -204,12 +216,13 @@ fun DefaultBanner(onSet: () -> Unit, onHide: () -> Unit) {
 fun Root(store: Store) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(pageCount = { 3 }) // 0 Markets, 1 Journal, 2 Apps
+    val pagerState = rememberPagerState(pageCount = { 4 }) // see Pages
 
     var toolsOpen by remember { mutableStateOf(false) }
     var alertsOpen by remember { mutableStateOf(false) }
     var alertFor by remember { mutableStateOf<String?>(null) } // "" = ask for the symbol
     var chartSym by remember { mutableStateOf<String?>(null) }
+    var webPage by remember { mutableStateOf<Pair<String, String>?>(null) } // url to title
     var cat by remember { mutableStateOf(Cat.values().firstOrNull { it.name == store.getStr("cat", "") }) }
 
     val watch = remember { mutableStateListOf<String>().apply { addAll(store.watchlist) } }
@@ -231,7 +244,8 @@ fun Root(store: Store) {
         toolsOpen = false
         alertsOpen = false
         chartSym = null
-        pagerState.animateScrollToPage(0)
+        webPage = null
+        pagerState.animateScrollToPage(Pages.MARKETS)
     }
 
     val targetPage = AppState.targetPage
@@ -246,7 +260,9 @@ fun Root(store: Store) {
     }
 
     fun handleBack() {
-        if (chartSym != null) {
+        if (webPage != null) {
+            webPage = null
+        } else if (chartSym != null) {
             chartSym = null
         } else if (alertsOpen) {
             alertsOpen = false
@@ -457,7 +473,11 @@ fun Root(store: Store) {
                         onAlert = { alertFor = it },
                         onOpenChart = { chartSym = it }
                     )
-                    1 -> JournalScreen(
+                    Pages.NEWS -> NewsScreen(
+                        watch = watch,
+                        onOpen = { url, title -> webPage = url to title }
+                    )
+                    Pages.JOURNAL -> JournalScreen(
                         trades = trades,
                         hits = hits,
                         onSave = { saveTrade(it) },
@@ -500,6 +520,8 @@ fun Root(store: Store) {
         }
 
         chartSym?.let { s -> ChartScreen(sym = s, store = store, onClose = { chartSym = null }) }
+
+        webPage?.let { (url, title) -> WebScreen(url = url, title = title, onClose = { webPage = null }) }
 
         alertFor?.let { s ->
             AlertEditDialog(

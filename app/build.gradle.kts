@@ -12,8 +12,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // CI passes -Pvc (always increasing) and -Pvn (the tag) so every build can update the previous one.
-        versionCode = (project.findProperty("vc") as String?)?.toIntOrNull() ?: 5
-        versionName = (project.findProperty("vn") as String?) ?: "0.5.0"
+        versionCode = (project.findProperty("vc") as String?)?.toIntOrNull() ?: 6
+        versionName = (project.findProperty("vn") as String?) ?: "0.6.0"
     }
 
     // A real key is used when CI provides one (KEYSTORE_FILE and friends); otherwise release falls back

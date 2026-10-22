@@ -8,6 +8,19 @@ The CI uses the section matching the pushed tag (`vX.Y.Z`) as GitHub Release not
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-22
+
+### Added
+
+- News page (page 2 of 4, between Markets and Journal) with two tabs: Forex Factory headlines (all / breaking, impact stripe, source, age, comments) and the economic calendar (this week / next week, High / Medium+ / All, "My pairs" filter that follows the watchlist currencies, countdown to the next high-impact event, actual / forecast / previous with better / worse colour).
+- Tapping a story or event opens it in an in-app browser (`WebScreen`); a button opens the whole Forex Factory page when scraping is blocked.
+- Calendar sources: the Forex Factory calendar page (includes released actual values) with automatic fallback to the official weekly JSON export (forecast and previous only).
+- `NewsParser.kt` is pure Kotlin (no Android classes) and was compiled and tested on a JVM against sample markup.
+
+### Changed
+
+- Pager pages are now Markets, News, Journal, Apps (`Pages` constants); SL/TP notifications open Journal. The tab bar shows the label only for the selected tab.
+
 ## [0.5.0] - 2026-10-20
 
 ### Added

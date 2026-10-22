@@ -3,6 +3,34 @@
 Extra notes for each zip delivered to the owner, newest first. Each entry says what changed, what was **not** verified, how to test it,
 and what to do if it breaks. `CHANGELOG.md` stays the formal list of changes; this file is the practical side.
 
+## 0.6.0 - News tab: Forex Factory headlines and calendar (2026-10-22)
+
+**Verification:** `NewsParser.kt` (the parsers) was compiled with Kotlin 1.9.24 and passed 41 checks on a JVM, but against sample markup that I
+modelled on how the Forex Factory pages render. I could not see the raw HTML of the live pages, so a layout surprise is possible. The Android /
+Compose code (NewsRepo, NewsUi, WebScreen, wiring) is not compiled here; CI is the first real build.
+
+**First real test of auto update:** this is the first release after 0.5.0. Do **not** install the downloaded APK by hand. Open the app you
+already have (0.5.0) -> Tools -> App update -> Check now. It should offer 0.6.0; install it from there.
+
+**Test the News tab**
+1. Swipe to News (second tab). Headlines should list stories with a coloured stripe for breaking news; tap one -> it opens in the in-app browser.
+2. Calendar tab: events grouped by day in WIB, "Next high impact" card with a countdown. The line under the chips says where the data came
+   from: "Forex Factory calendar" (has Actual values) or "Forex Factory weekly feed (forecast and previous only)".
+3. "My pairs" keeps only currencies of your watchlist; High / Medium+ / All filter by impact.
+4. If a list stays empty, the red line under the chips says why (Cloudflare block, HTTP code, layout changed). Use the "Open forexfactory.com/..."
+   button to read it in the in-app browser, then send me the red message.
+
+**Known limits**
+- Forex Factory is behind Cloudflare. A plain HTTP request from a phone usually passes, but it can be challenged; the calendar then falls back to the
+  official weekly JSON export, headlines have no such fallback (use the browser button).
+- Their terms of service restrict automated access. Requests are cached (headlines 5 min, calendar 10 min, manual refresh at most every 20 s);
+  keep it for personal use and do not shorten those intervals.
+- The weekly JSON feed rate-limits aggressively (HTTP 429); the app waits and keeps showing the last data.
+- Times come from Unix timestamps and are shown in WIB, whatever timezone Forex Factory uses.
+- Headlines include FF's non-trading sections (entertainment, education) because the page cannot be told apart per section without the raw HTML.
+
+**Next candidates:** native candlestick chart, small journal features, widgets (host vs own widget undecided).
+
 ## 0.5.0 - backup, auto update, permanent signing key (2026-10-20)
 
 **Not verified:** nothing was compiled or run. CI is the first real build.
@@ -25,6 +53,9 @@ and what to do if it breaks. `CHANGELOG.md` stays the formal list of changes; th
   appear on the next resume (or after Check now), download, and open the system installer. Android asks once to "allow installs from this
   app".
 - Check the version shown in Tools matches the tag.
+
+**Fixed after first run:** `tools/make-keystore.sh` exited silently at the password step (`tr | head` under `pipefail` returns 141). The password is now
+generated with `head | od | tr`. If you ever see a script stop with no message, run it with `bash -x`.
 
 **Known limits**
 - Auto update needs the repository (and its releases) to be public. For a private repo the check reports "No public release found".

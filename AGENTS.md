@@ -42,12 +42,16 @@ architecture, conventions, symbol syntax, or the delivery workflow.
 | `TvFeed.kt` | Unofficial TradingView websocket quote feed (OkHttp): connect, subscribe, parse `qsd`, heartbeat, status |
 | `Data.kt` | `Trade` and `PriceAlert` models, JSON (de)serialization, `Store` (SharedPreferences) |
 | `Alerts.kt` | `AlertRepo` (process-wide alert + SL/TP hit state, shared by UI and service), `AlertEngine` (decides when an alert fires; call `evaluate` with fresh quotes from anywhere), `Notifier` (channels, sounds, notifications), `MonitorService` (foreground service) and `BootReceiver` |
+| `NewsParser.kt` | Pure Kotlin (no Android imports): `NewsItem`, `CalEvent`, Forex Factory news / calendar parsers. Keep it Android-free so it can be compiled and tested on a JVM |
+| `NewsRepo.kt` | `NewsState` (Compose-observable) and `NewsRepo`: OkHttp fetch, caching, calendar fallback to the official weekly JSON feed |
+| `NewsUi.kt` | `NewsScreen`: Headlines and Calendar tabs |
+| `WebScreen.kt` | Full-screen in-app browser overlay (used by News; also the Cloudflare fallback) |
 | `AlertsUi.kt` | `AlertEditDialog` (new price alert) and the full-screen `AlertsScreen` overlay (alert list, SL/TP switch, sounds, vibration, loud mode, background and battery settings) |
 | `Common.kt` | Colors, theme, `Ico`, `AppIcon`, app listing/launching helpers, `fmtN`, `toNum` |
 
 Other: `.github/workflows/build.yml` (CI), `tools/ship.sh` (deliver), `CHANGELOG.md`, `AGENTS.md`.
 
-Navigation model: **no bottom bar and no dock**. `HorizontalPager` pages = Markets / Journal / Apps, switched by swiping or by the slim
+Navigation model: **no bottom bar and no dock**. `HorizontalPager` pages = Markets / News / Journal / Apps (`Pages` constants, never hard-code indexes), switched by swiping or by the slim
 `TopBar` pill. The calculator icon in the `TopBar` opens the Tools overlay. Tap a pair -> chart overlay.
 Home button while open -> `onNewIntent` -> `AppState.homeSignal++` -> closes overlays and returns to page 0.
 
@@ -140,7 +144,8 @@ External response shapes you rely on (verify if something breaks):
 
 ### Roadmap agreed with the owner (staged, one zip each)
 
-1. 0.5.0 backup, auto update, permanent key (this stage; prerequisite for in-place updates).
+1. 0.5.0 backup, auto update, permanent key (done).
+1b. 0.6.0 News tab (Forex Factory headlines and calendar).
 2. Small journal features (per-setup stats, per-pair notes, screenshots) and a native candlestick chart (Binance / Yahoo candles, pan and
    pinch, entry/SL/TP and alert levels drawn on it).
 3. Home-screen widgets: open question whether to host third-party widgets inside the launcher or ship a widget for other launchers.

@@ -16,6 +16,7 @@ if [ -e "$KS" ]; then
   exit 1
 fi
 
+# head first: a reader that closes early (tr ... | head) makes pipefail exit silently with 141.
 PASS="$(head -c 18 /dev/urandom | od -An -tx1 | tr -d "[:space:]")"
 keytool -genkeypair -keystore "$KS" -alias "$ALIAS" -keyalg RSA -keysize 4096 -validity 36500 \
   -storepass "$PASS" -keypass "$PASS" -dname "CN=Trader Launcher, O=devarz, C=ID"
